@@ -301,7 +301,7 @@ function MessageBubble({
         </ReactMarkdown>
       </div>
 
-      {message.role === "system" && isLast && onRetry && (
+      {message.role === "assistant" && isLast && onRetry && (
         <button
           onClick={onRetry}
           className="mt-2 flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"

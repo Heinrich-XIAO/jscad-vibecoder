@@ -98,9 +98,11 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     
     setIsGenerating(true);
     setError(null);
+    console.log('Executing code, length:', code.length);
     
     try {
       const result = await execute(code, parameters);
+      console.log('Result:', result.type, result.error ? 'error: ' + result.error : 'geometries: ' + (result.geometry?.length || 0));
       
       if (result.error) {
         setError(result.error);
@@ -109,6 +111,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         setGeometry(result.geometry);
       }
     } catch (err) {
+      console.error('Execute error:', err);
       setError(err instanceof Error ? err.message : "Unknown error");
       setGeometry([]);
     } finally {
