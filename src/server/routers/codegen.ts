@@ -23,7 +23,7 @@ export const codegenRouter = router({
           })
           .optional(),
         openRouterApiKey: z.string().optional(),
-        model: z.string().default("anthropic/claude-sonnet-4-20250514"),
+        model: z.string().default("anthropic/claude-sonnet-4"),
         maxIterations: z.number().default(5),
       })
     )

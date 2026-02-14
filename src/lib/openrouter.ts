@@ -13,7 +13,7 @@ const STORAGE_KEY = "jscad-vibe-openrouter";
 
 const DEFAULT_SETTINGS: OpenRouterSettings = {
   apiKey: "",
-  model: "anthropic/claude-sonnet-4-20250514",
+  model: "anthropic/claude-sonnet-4",
   maxTokens: 4096,
   temperature: 0.3,
 };
@@ -49,7 +49,9 @@ export function saveOpenRouterSettings(
 }
 
 export const AVAILABLE_MODELS = [
-  { id: "anthropic/claude-sonnet-4-20250514", name: "Claude Sonnet 4", provider: "Anthropic" },
+  { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5", provider: "Anthropic" },
+  { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", provider: "Anthropic" },
+  { id: "anthropic/claude-opus-4", name: "Claude Opus 4", provider: "Anthropic" },
   { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic" },
   { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI" },
   { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI" },
