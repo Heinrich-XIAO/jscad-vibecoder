@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
 import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Keyboard, Undo2, Redo2 } from "lucide-react";
 import { ChatPanel } from "@/components/chat-panel";
@@ -30,10 +31,11 @@ interface ProjectPageProps {
 
 export default function ProjectPage({ id }: ProjectPageProps) {
   const router = useRouter();
-  const projectId = id;
+  
+  const projectId = id ? (id as Id<"projects">) : null;
 
-  const project = useQuery(api.projects.get, { id: projectId });
-  const versions = useQuery(api.versions.list, { projectId });
+  const project = useQuery(api.projects.get, projectId ? { id: projectId } : "skip");
+  const versions = useQuery(api.versions.list, projectId ? { projectId } : "skip");
   const updateProject = useMutation(api.projects.update);
   const createVersion = useMutation(api.versions.create);
 
@@ -69,8 +71,8 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const { execute } = useJscadWorker();
 
   useEffect(() => {
-    if (project && !code) {
-      resetCode(project.currentCode);
+    if (project && !code && project.currentVersion?.jscadCode) {
+      resetCode(project.currentVersion.jscadCode);
     }
   }, [project, code, resetCode]);
 
@@ -116,7 +118,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [executeCode]);
 
   const handleSaveVersion = useCallback(async () => {
-    if (!code) return;
+    if (!code || !projectId) return;
     
     try {
       const versionId = await createVersion({
@@ -126,15 +128,10 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         isValid: true,
       });
       setCurrentVersionId(versionId);
-      
-      await updateProject({
-        id: projectId,
-        currentCode: code,
-      });
     } catch (err) {
       console.error("Failed to save version:", err);
     }
-  }, [code, createVersion, projectId, updateProject]);
+  }, [code, createVersion, projectId]);
 
   const handleLoadVersion = useCallback((versionCode: string, versionId: string) => {
     setCode(versionCode);
@@ -380,7 +377,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <header className="border-b border-border px-4 py-3 flex items-center justify-between bg-card">
         <div className="flex items-center gap-4">
           <button
@@ -395,7 +392,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               <p className="text-xs text-muted-foreground">
                 {versions?.length || 0} versions
               </p>
-              <CollaborationIndicator projectId={projectId} />
+              {projectId && <CollaborationIndicator projectId={projectId} />}
             </div>
           </div>
         </div>
@@ -483,7 +480,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {showChat && (
+        {showChat && projectId && (
           <div className="w-80 border-r border-border flex flex-col bg-card">
             <ChatPanel
               projectId={projectId}

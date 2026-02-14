@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 
 interface UserPresence {
   userId: string;
@@ -27,7 +28,7 @@ export function useCollaboration(projectId: string): UseCollaborationReturn {
   const [currentUserName] = useState(() => `User ${Math.floor(Math.random() * 1000)}`);
   
   // Query for online users
-  const presenceData = useQuery(api.presence.list, { projectId });
+  const presenceData = useQuery(api.presence.list, { projectId: projectId as Id<"projects"> });
   
   // Mutation to update presence
   const updatePresenceMutation = useMutation(api.presence.update);
@@ -36,7 +37,7 @@ export function useCollaboration(projectId: string): UseCollaborationReturn {
   useEffect(() => {
     const heartbeat = setInterval(() => {
       updatePresenceMutation({
-        projectId,
+        projectId: projectId as Id<"projects">,
         userId: currentUserId,
         userName: currentUserName,
         isEditing: false,
@@ -50,7 +51,7 @@ export function useCollaboration(projectId: string): UseCollaborationReturn {
   
   const updatePresence = useCallback((isEditing: boolean) => {
     updatePresenceMutation({
-      projectId,
+      projectId: projectId as Id<"projects">,
       userId: currentUserId,
       userName: currentUserName,
       isEditing,

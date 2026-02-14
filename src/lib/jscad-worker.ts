@@ -52,28 +52,25 @@ export class JscadWorker {
 
   private initWorker() {
     // Create an inline worker that evaluates JSCAD code
+    // Using importScripts to load JSCAD from CDN since dynamic imports don't work in inline workers
     const workerCode = `
-      // Import JSCAD modeling library
-      let jscadModeling = null;
+      // Load JSCAD modeling library from CDN
+      importScripts('https://unpkg.com/@jscad/modeling@2.12.0/dist/jscad-modeling.min.js');
+      
+      const modeling = jscadModeling;
 
-      async function loadJscad() {
-        if (jscadModeling) return jscadModeling;
-        try {
-          jscadModeling = await import('@jscad/modeling');
-          return jscadModeling;
-        } catch (e) {
-          // Fallback: the modeling library may need to be loaded differently in worker context
-          return null;
-        }
-      }
-
-      self.onmessage = async function(e) {
+      self.onmessage = function(e) {
         const { type, code, parameters } = e.data;
         
         if (type === 'evaluate') {
           try {
-            // Create a sandboxed require function
-            const modeling = await loadJscad();
+            if (!modeling) {
+              self.postMessage({ 
+                type: 'error', 
+                error: 'Failed to load JSCAD modeling library' 
+              });
+              return;
+            }
             
             const mockRequire = (path) => {
               if (path === '@jscad/modeling') return modeling;
@@ -144,7 +141,7 @@ export class JscadWorker {
     `;
 
     const blob = new Blob([workerCode], { type: "application/javascript" });
-    this.worker = new Worker(URL.createObjectURL(blob), { type: "module" });
+    this.worker = new Worker(URL.createObjectURL(blob));
 
     this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       if (e.data.type === "error") {

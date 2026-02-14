@@ -2,6 +2,7 @@ import ProjectPage from "./project-client";
 
 export const dynamic = 'force-dynamic';
 
-export default function Page({ params }: { params: { id: string } }) {
-  return <ProjectPage id={params.id} />;
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <ProjectPage id={id} />;
 }

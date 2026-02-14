@@ -12,20 +12,27 @@ import { useRouter } from "next/navigation";
 export default function DashboardPage() {
   const router = useRouter();
   
-  // Handle case where Convex is not configured
+  const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+  const isConvexConfigured = convexUrl && convexUrl.startsWith("https://") && !convexUrl.includes("placeholder");
+  
   let projects: any;
   let templates: any;
   let createProject: any;
   let deleteProject: any;
   let convexError: string | null = null;
   
-  try {
-    projects = useQuery(api.projects.list);
-    templates = useQuery(api.templates.list);
-    createProject = useMutation(api.projects.create);
-    deleteProject = useMutation(api.projects.remove);
-  } catch (error) {
+  if (!isConvexConfigured) {
     convexError = "Convex not configured. Run: npx convex dev --once --configure=new";
+  } else {
+    try {
+      projects = useQuery(api.projects.list, {});
+      templates = useQuery(api.templates.list, {});
+      createProject = useMutation(api.projects.create);
+      deleteProject = useMutation(api.projects.remove);
+    } catch (error) {
+      console.log("Convex hook error:", error);
+      convexError = "Convex not configured. Run: npx convex dev --once --configure=new";
+    }
   }
   
   const [showSettings, setShowSettings] = useState(false);

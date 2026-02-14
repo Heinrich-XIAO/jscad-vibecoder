@@ -13,6 +13,7 @@ import {
 import { trpc } from "@/lib/trpc-provider";
 import { getOpenRouterSettings } from "@/lib/openrouter";
 import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
 
 interface ChatMessage {
@@ -49,7 +50,7 @@ export function ChatPanel({
   const inputRef = (externalInputRef || internalInputRef) as React.RefObject<HTMLTextAreaElement>;
 
   // Convex hooks for chat persistence
-  const convexMessages = useQuery(api.chat.list, { projectId });
+  const convexMessages = useQuery(api.chat.list, { projectId: projectId as Id<"projects"> });
   const sendMessage = useMutation(api.chat.send);
 
   const generateMutation = trpc.codegen.generate.useMutation();
@@ -70,7 +71,7 @@ export function ChatPanel({
   const persistMessage = useCallback(async (message: Omit<ChatMessage, "id">) => {
     try {
       await sendMessage({
-        projectId,
+        projectId: projectId as Id<"projects">,
         role: message.role,
         content: message.content,
         toolCalls: message.toolCalls,
