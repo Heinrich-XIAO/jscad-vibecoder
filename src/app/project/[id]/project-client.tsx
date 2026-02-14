@@ -102,12 +102,13 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     
     try {
       const result = await execute(code, parameters);
-      console.log('Result:', result.type, result.error ? 'error: ' + result.error : 'geometries: ' + (result.geometry?.length || 0));
+      console.log('Result:', result.error ? 'error: ' + result.error : 'geometry count: ' + (result.geometry?.length || 0), 'first geom:', result.geometry?.[0] ? 'exists' : 'null');
       
       if (result.error) {
         setError(result.error);
         setGeometry([]);
       } else if (result.geometry) {
+        console.log('Setting geometry, type:', typeof result.geometry[0], 'keys:', Object.keys(result.geometry[0] || {}));
         setGeometry(result.geometry);
       }
     } catch (err) {
