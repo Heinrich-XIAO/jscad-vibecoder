@@ -126,23 +126,22 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const w = canvas.width;
-    const h = canvas.height;
-
-    ctx.clearRect(0, 0, w, h);
-
-    // Background
-    ctx.fillStyle = "#1a1a2e";
+    const w = canvas.width / window.devicePixelRatio;
+    const h = canvas.height / window.devicePixelRatio;
+    const cx = w / 2;
+    const cy = h / 2;
+    
+    // Clear
+    ctx.fillStyle = "#1e1e1e";
     ctx.fillRect(0, 0, w, h);
+    
+    console.log('Render: canvas size', w, 'x', h, 'geoms:', geometry?.length);
 
     // Grid
     const gridSize = 20 * zoom;
     const gridCount = 20;
     ctx.strokeStyle = "#2a2a3e";
     ctx.lineWidth = 0.5;
-
-    const cx = w / 2;
-    const cy = h / 2;
 
     for (let i = -gridCount; i <= gridCount; i++) {
       const offset = i * gridSize;
