@@ -6,14 +6,15 @@ import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation } from "convex/react";
 import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Keyboard, Undo2, Redo2 } from "lucide-react";
 import { ChatPanel } from "@/components/chat-panel";
-import { CodeEditor } from "@/components/code-editor";
-import { Viewport3D } from "@/components/viewport-3d";
+import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
+import { Viewport3D, type Viewport3DHandle } from "@/components/viewport-3d";
 import { ParameterSliders } from "@/components/parameter-sliders";
 import { VersionHistory } from "@/components/version-history";
 import { ExportDialog } from "@/components/export-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { GeometryInfo } from "@/components/geometry-info";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
+import { CollaborationIndicator } from "@/components/collaboration-indicator";
 import { extractParameters, type ExtractedParameter } from "@/lib/parameter-extractor";
 import { useJscadWorker } from "@/lib/jscad-worker";
 import { useKeyboardShortcuts, type KeyboardShortcut } from "@/lib/use-keyboard-shortcuts";
@@ -61,6 +62,8 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [showGeometryInfo, setShowGeometryInfo] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const viewportRef = useRef<Viewport3DHandle>(null);
+  const editorRef = useRef<CodeEditorHandle>(null);
 
   const { execute } = useJscadWorker();
 
@@ -193,6 +196,63 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         description: "Redo (alt)",
         group: "Edit",
       },
+      {
+        key: "f",
+        shift: true,
+        alt: true,
+        handler: () => editorRef.current?.format(),
+        description: "Format Code",
+        group: "Edit",
+      },
+      // --- View ---
+      {
+        key: "ArrowUp",
+        handler: () => viewportRef.current?.rotate(-10, 0),
+        description: "Rotate Up",
+        group: "View",
+      },
+      {
+        key: "ArrowDown",
+        handler: () => viewportRef.current?.rotate(10, 0),
+        description: "Rotate Down",
+        group: "View",
+      },
+      {
+        key: "ArrowLeft",
+        handler: () => viewportRef.current?.rotate(0, -10),
+        description: "Rotate Left",
+        group: "View",
+      },
+      {
+        key: "ArrowRight",
+        handler: () => viewportRef.current?.rotate(0, 10),
+        description: "Rotate Right",
+        group: "View",
+      },
+      {
+        key: "+",
+        handler: () => viewportRef.current?.zoomIn(),
+        description: "Zoom In",
+        group: "View",
+      },
+      {
+        key: "=",
+        handler: () => viewportRef.current?.zoomIn(),
+        description: "Zoom In",
+        group: "View",
+      },
+      {
+        key: "-",
+        handler: () => viewportRef.current?.zoomOut(),
+        description: "Zoom Out",
+        group: "View",
+      },
+      {
+        key: "r",
+        handler: () => viewportRef.current?.reset(),
+        description: "Reset View",
+        group: "View",
+      },
       // --- Panels ---
       {
         key: "/",
@@ -289,9 +349,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
           </button>
           <div>
             <h1 className="font-semibold text-lg">{project.name}</h1>
-            <p className="text-xs text-muted-foreground">
-              {versions?.length || 0} versions
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-muted-foreground">
+                {versions?.length || 0} versions
+              </p>
+              <CollaborationIndicator projectId={projectId} />
+            </div>
           </div>
         </div>
 
@@ -395,6 +458,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               code={code}
               onChange={handleCodeChange}
               error={error}
+              ref={editorRef}
             />
           </div>
         </div>
@@ -404,6 +468,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             <Viewport3D
               geometry={geometry}
               isGenerating={isGenerating}
+              ref={viewportRef}
             />
           </div>
 
