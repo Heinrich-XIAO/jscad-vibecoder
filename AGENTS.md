@@ -1,7 +1,8 @@
 # Local Agent Guidelines
 
 ## Response Completion
-* Never fully "complete" a response. Always use the question tool when you are complete to ask the user for direction.
+* **ALWAYS** use the `question` tool to present options for the next steps instead of asking "Would you like me to..." in the text.
+* **EXCEPTION:** Do NOT use the `question` tool if you have no relevant suggestions or choices to offer.
 
 ## Subagent Policy
 * If you are Opus 4.5 or another Anthropic model, do not spin up subagents since that would cost a lot of money.

@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Send,
   Loader2,
@@ -291,8 +293,12 @@ function MessageBubble({
           {config.label}
         </span>
       </div>
-      <div className={`text-sm ${config.textColor} whitespace-pre-wrap`}>
-        {message.content}
+      <div
+        className={`text-sm ${config.textColor} prose prose-sm prose-invert max-w-none break-words [&>p]:mb-2 [&>p:last-child]:mb-0 [&>pre]:bg-black/50 [&>pre]:p-2 [&>pre]:rounded-md`}
+      >
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {message.content}
+        </ReactMarkdown>
       </div>
 
       {message.role === "system" && isLast && onRetry && (

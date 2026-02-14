@@ -614,6 +614,8 @@ module.exports = { main, getParameterDefinitions }
 - Always use require() syntax for JSCAD imports (not ES6 import)
 - All measurements are in millimeters (mm) by default
 - Use segments: 32 for smooth curves (default is often too low)
+- ALWAYS use FUNCTION DECLARATIONS (not const/let arrow functions) for helper functions - they must be defined BEFORE main() since JavaScript does not hoist const/let function expressions. Correct: \`function myHelper() {}\`. Incorrect: \`const myHelper = () => {}\`
+- Define all helper functions BEFORE the main function
 - Explain what you're doing in your text responses
 - After making changes, summarize what was modified`;
 
