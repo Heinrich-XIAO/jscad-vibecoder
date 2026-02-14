@@ -32,10 +32,14 @@ interface ProjectPageProps {
 export default function ProjectPage({ id }: ProjectPageProps) {
   const router = useRouter();
   
-  const projectId = id ? (id as Id<"projects">) : null;
+  const queryArgs = useMemo(() => {
+    if (!id) return "skip";
+    return { id: id as Id<"projects"> };
+  }, [id]);
 
-  const project = useQuery(api.projects.get, projectId ? { id: projectId } : "skip");
-  const versions = useQuery(api.versions.list, projectId ? { projectId } : "skip");
+  const projectId = queryArgs === "skip" ? null : queryArgs.id;
+  const project = useQuery(api.projects.get, queryArgs);
+  const versions = useQuery(api.versions.list, queryArgs === "skip" ? "skip" : { projectId: queryArgs.id });
   const updateProject = useMutation(api.projects.update);
   const createVersion = useMutation(api.versions.create);
 
