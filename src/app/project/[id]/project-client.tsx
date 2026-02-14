@@ -8,7 +8,7 @@ import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code
 import { ChatPanel } from "@/components/chat-panel";
 import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
 import { Viewport3D, type Viewport3DHandle } from "@/components/viewport-3d";
-import { ParameterSliders } from "@/components/parameter-sliders";
+import { ParameterSliders, type ParameterSlidersHandle } from "@/components/parameter-sliders";
 import { VersionHistory } from "@/components/version-history";
 import { ExportDialog } from "@/components/export-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
@@ -64,6 +64,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const viewportRef = useRef<Viewport3DHandle>(null);
   const editorRef = useRef<CodeEditorHandle>(null);
+  const parametersRef = useRef<ParameterSlidersHandle>(null);
 
   const { execute } = useJscadWorker();
 
@@ -135,10 +136,30 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     }
   }, [code, createVersion, projectId, updateProject]);
 
-  const handleLoadVersion = (versionCode: string, versionId: string) => {
+  const handleLoadVersion = useCallback((versionCode: string, versionId: string) => {
     setCode(versionCode);
     setCurrentVersionId(versionId);
-  };
+  }, [setCode]);
+
+  const handleSelectVersion = useCallback((offset: number) => {
+    if (!versions || versions.length === 0) return;
+    
+    // versions are likely sorted by creation time (descending)
+    // Find current index
+    const currentIndex = currentVersionId 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ? versions.findIndex((v: any) => v._id === currentVersionId)
+      : 0; 
+    
+    if (currentIndex === -1) return;
+    
+    const newIndex = currentIndex + offset;
+    
+    if (newIndex >= 0 && newIndex < versions.length) {
+      const v = versions[newIndex];
+      handleLoadVersion(v.jscadCode, v._id);
+    }
+  }, [versions, currentVersionId, handleLoadVersion]);
 
   const handleParameterChange = (name: string, value: number | boolean | string) => {
     setParameters((prev) => ({ ...prev, [name]: value }));
@@ -286,12 +307,32 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         description: "Focus chat input",
         group: "Panels",
       },
+      {
+        key: "p",
+        handler: () => parametersRef.current?.focusFirst(),
+        description: "Focus parameters",
+        group: "Panels",
+      },
       // --- Navigation / dialogs ---
       {
         key: ",",
         ctrl: true,
         handler: () => setShowSettings(true),
         description: "Open settings",
+        group: "Navigation",
+      },
+      {
+        key: "ArrowUp",
+        alt: true,
+        handler: () => handleSelectVersion(-1),
+        description: "Previous Version",
+        group: "Navigation",
+      },
+      {
+        key: "ArrowDown",
+        alt: true,
+        handler: () => handleSelectVersion(1),
+        description: "Next Version",
         group: "Navigation",
       },
       {
@@ -324,6 +365,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       showSettings,
       showVersions,
       showShortcuts,
+      handleSelectVersion,
     ]
   );
 
@@ -488,6 +530,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
                 parameters={parameterDefs}
                 values={parameters}
                 onChange={handleParameterChange}
+                ref={parametersRef}
               />
             </div>
           )}

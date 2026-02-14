@@ -11,10 +11,23 @@ import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const projects = useQuery(api.projects.list);
-  const templates = useQuery(api.templates.list);
-  const createProject = useMutation(api.projects.create);
-  const deleteProject = useMutation(api.projects.remove);
+  
+  // Handle case where Convex is not configured
+  let projects: any;
+  let templates: any;
+  let createProject: any;
+  let deleteProject: any;
+  let convexError: string | null = null;
+  
+  try {
+    projects = useQuery(api.projects.list);
+    templates = useQuery(api.templates.list);
+    createProject = useMutation(api.projects.create);
+    deleteProject = useMutation(api.projects.remove);
+  } catch (error) {
+    convexError = "Convex not configured. Run: npx convex dev --once --configure=new";
+  }
+  
   const [showSettings, setShowSettings] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -93,6 +106,26 @@ export default function DashboardPage() {
   );
 
   useKeyboardShortcuts(shortcuts);
+
+  // Show error state if Convex is not configured
+  if (convexError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-6">
+          <Box className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+          <h2 className="text-xl font-semibold mb-2">Setup Required</h2>
+          <p className="text-muted-foreground mb-6">{convexError}</p>
+          <div className="bg-muted p-4 rounded-lg text-left text-sm font-mono mb-4">
+            <p className="text-muted-foreground"># Run this command:</p>
+            <p className="text-primary">npx convex dev --once --configure=new</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Then refresh the page after Convex is initialized.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString("en-US", {

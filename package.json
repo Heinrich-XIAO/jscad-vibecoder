@@ -9,11 +9,26 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@jscad/io-utils": "^2.0.32",
+    "@jscad/modeling": "^2.12.7",
+    "@jscad/stl-serializer": "^2.1.22",
+    "@monaco-editor/react": "^4.7.0",
+    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-query-devtools": "^5.91.3",
+    "@trpc/client": "^11.10.0",
+    "@trpc/next": "^11.10.0",
+    "@trpc/react-query": "^11.10.0",
+    "@trpc/server": "^11.10.0",
+    "convex": "^1.31.7",
+    "lucide-react": "^0.564.0",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "superjson": "^2.2.6",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@jscad/regl-renderer": "^2.6.14",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

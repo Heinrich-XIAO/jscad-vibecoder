@@ -1,0 +1,59 @@
+/**
+ * OpenRouter settings management — stored in localStorage.
+ */
+
+export interface OpenRouterSettings {
+  apiKey: string;
+  model: string;
+  maxTokens: number;
+  temperature: number;
+}
+
+const STORAGE_KEY = "jscad-vibe-openrouter";
+
+const DEFAULT_SETTINGS: OpenRouterSettings = {
+  apiKey: "",
+  model: "anthropic/claude-sonnet-4-20250514",
+  maxTokens: 4096,
+  temperature: 0.3,
+};
+
+export function getOpenRouterSettings(): OpenRouterSettings {
+  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+    }
+  } catch {
+    // Ignore parse errors
+  }
+
+  return DEFAULT_SETTINGS;
+}
+
+export function saveOpenRouterSettings(
+  settings: Partial<OpenRouterSettings>
+): OpenRouterSettings {
+  const current = getOpenRouterSettings();
+  const updated = { ...current, ...settings };
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  } catch {
+    // Ignore storage errors
+  }
+
+  return updated;
+}
+
+export const AVAILABLE_MODELS = [
+  { id: "anthropic/claude-sonnet-4-20250514", name: "Claude Sonnet 4", provider: "Anthropic" },
+  { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", provider: "Anthropic" },
+  { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI" },
+  { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI" },
+  { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", provider: "Google" },
+  { id: "meta-llama/llama-3.1-405b-instruct", name: "Llama 3.1 405B", provider: "Meta" },
+  { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek" },
+] as const;
