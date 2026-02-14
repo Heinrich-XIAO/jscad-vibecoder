@@ -23,7 +23,7 @@ export const codegenRouter = router({
           })
           .optional(),
         openRouterApiKey: z.string().optional(),
-        model: z.string().default("anthropic/claude-sonnet-4"),
+        model: z.string().default("google/gemini-2.5-pro-preview-06-05"),
         maxIterations: z.number().default(5),
       })
     )
@@ -82,7 +82,13 @@ export const codegenRouter = router({
 
         // Execute each tool call
         for (const toolCall of assistantMessage.tool_calls) {
-          const args = JSON.parse(toolCall.function.arguments);
+          let args;
+          try {
+            args = JSON.parse(toolCall.function.arguments);
+          } catch (e) {
+            console.error("Failed to parse tool arguments:", toolCall.function.arguments);
+            args = {};
+          }
           const result = executeToolCall(
             toolCall.function.name,
             args,
