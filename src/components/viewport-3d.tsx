@@ -214,12 +214,15 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
 
     // Render geometries as wireframes
     if (geometry && geometry.length > 0 && !isGenerating) {
+      console.log('Viewport: rendering', geometry.length, 'geometries');
       ctx.strokeStyle = "#818cf8";
       ctx.lineWidth = 1;
 
       for (const geom of geometry) {
         renderGeometry(ctx, geom, project);
       }
+    } else {
+      console.log('Viewport: NOT rendering', geometry?.length || 0, 'geometries, generating:', isGenerating);
     }
 
     // Status text
