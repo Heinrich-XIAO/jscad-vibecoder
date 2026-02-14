@@ -22,7 +22,7 @@ export const codegenRouter = router({
             parameters: z.record(z.string(), z.unknown()).optional(),
           })
           .optional(),
-        openRouterApiKey: z.string(),
+        openRouterApiKey: z.string().optional(),
         model: z.string().default("anthropic/claude-sonnet-4-20250514"),
         maxIterations: z.number().default(5),
       })
@@ -36,6 +36,13 @@ export const codegenRouter = router({
         model,
         maxIterations,
       } = input;
+
+      const apiKey = openRouterApiKey || process.env.OPENROUTER_API_KEY;
+      if (!apiKey) {
+        throw new Error(
+          "OpenRouter API key is missing. Please configure it in Settings or on the server."
+        );
+      }
 
       const tools = buildToolDefinitions();
       const systemPrompt = buildSystemPrompt(currentCode, projectContext);
@@ -54,7 +61,7 @@ export const codegenRouter = router({
         iterations++;
 
         const response = await callOpenRouter({
-          apiKey: openRouterApiKey,
+          apiKey,
           model,
           messages,
           tools,

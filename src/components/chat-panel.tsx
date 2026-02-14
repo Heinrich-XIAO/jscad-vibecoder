@@ -106,15 +106,6 @@ export function ChatPanel({
     try {
       const settings = getOpenRouterSettings();
 
-      if (!settings.apiKey) {
-        onAddMessage({
-          role: "system",
-          content:
-            "No OpenRouter API key configured. Click the settings icon to add your API key.",
-        });
-        return;
-      }
-
       const result = await generateMutation.mutateAsync({
         prompt,
         currentCode,
