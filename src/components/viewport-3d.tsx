@@ -214,8 +214,9 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     // Render geometries as wireframes
     if (geometry && geometry.length > 0 && !isGenerating) {
       console.log('Viewport: rendering', geometry.length, 'geometries');
-      ctx.strokeStyle = "#818cf8";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "#00ff00";  // Bright green
+      ctx.lineWidth = 2;
+      ctx.fillStyle = "rgba(0, 255, 0, 0.1)";  // Semi-transparent green fill
 
       for (const geom of geometry) {
         renderGeometry(ctx, geom, project);
