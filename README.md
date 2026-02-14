@@ -1,36 +1,161 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# JSCAD Vibecoding App
 
-## Getting Started
+AI-powered parametric 3D modeling with JSCAD. A Next.js + Convex + tRPC application that helps users "vibecode" (AI-assisted iterative coding) parametric 3D models.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **AI-Powered Code Generation**: Natural language to JSCAD code via OpenRouter API
+- **Live 3D Preview**: Real-time wireframe rendering with rotation/zoom
+- **Parameter Sliders**: Auto-generated UI for model parameters
+- **Version History**: Track changes with AI vs manual edits
+- **Export**: STL/OBJ export for 3D printing
+- **14 AI Tools**: `write_code`, `edit_code`, `read_code`, `get_diagnostics`, `check_intersection`, `measure_geometry`, `check_printability`, `list_variables`, `render_preview`, `set_parameters`, `ask_user`, `search_docs`, `diff_versions`, `split_components`
+
+## Tech Stack
+
+- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS v4, Lucide React
+- **Backend**: Convex (serverless database + functions)
+- **API Layer**: tRPC with React Query
+- **3D Library**: JSCAD v2 (@jscad/modeling)
+- **Editor**: Monaco Editor (@monaco-editor/react)
+- **AI**: OpenRouter API (supports multiple LLM providers)
+
+## Project Structure
+
+```
+├── convex/                    # Convex backend
+│   ├── schema.ts             # Database schema (5 tables)
+│   ├── projects.ts           # Project CRUD operations
+│   ├── versions.ts           # Version history
+│   ├── chat.ts               # Chat messages
+│   ├── templates.ts          # Starter templates
+│   └── exports.ts            # Export tracking
+├── src/
+│   ├── app/                  # Next.js App Router
+│   │   ├── page.tsx          # Dashboard
+│   │   ├── layout.tsx        # Root layout with providers
+│   │   └── project/[id]/     # Project editor
+│   ├── components/           # React components
+│   │   ├── chat-panel.tsx    # AI chat interface
+│   │   ├── code-editor.tsx   # Monaco editor
+│   │   ├── viewport-3d.tsx   # 3D wireframe renderer
+│   │   ├── parameter-sliders.tsx
+│   │   ├── version-history.tsx
+│   │   ├── export-dialog.tsx
+│   │   └── settings-dialog.tsx
+│   ├── lib/                  # Utilities
+│   │   ├── jscad-worker.ts   # Web Worker for code eval
+│   │   ├── parameter-extractor.ts
+│   │   ├── openrouter.ts     # API settings
+│   │   ├── trpc-provider.tsx
+│   │   └── convex-provider.tsx
+│   ├── server/               # tRPC backend
+│   │   ├── trpc.ts
+│   │   └── routers/
+│   │       ├── _app.ts
+│   │       └── codegen.ts    # AI agent router (14 tools)
+│   └── types/                # Type declarations
+│       └── jscad.d.ts        # JSCAD module types
+├── .env.local                # Environment variables
+└── package.json
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup Instructions
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 1. Install Dependencies
+```bash
+cd /Users/heinrich/Documents/3dai
+bun install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 2. Set Up Convex (REQUIRED)
 
-## Learn More
+You need to initialize Convex to generate types and set up the backend:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npx convex dev --once --configure=new
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+This will:
+- Create a Convex deployment
+- Generate the `_generated` folder with TypeScript types
+- Push the schema and functions to the cloud
+- Set up the `NEXT_PUBLIC_CONVEX_URL` in `.env.local`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 3. Configure OpenRouter (Optional)
 
-## Deploy on Vercel
+1. Get an API key at [openrouter.ai/keys](https://openrouter.ai/keys)
+2. Open the app settings (gear icon) and paste your key
+3. Or set it in `.env.local`:
+   ```
+   OPENROUTER_API_KEY=your-key-here
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 4. Run Development Server
+```bash
+bun run dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open [http://localhost:3000](http://localhost:3000)
+
+### 5. Seed Starter Templates (Optional)
+
+After Convex is set up, you can seed the default templates:
+```bash
+npx convex run templates:seed
+```
+
+## Usage
+
+1. **Create a Project**: Click "New Project" on the dashboard
+2. **Chat with AI**: Describe what you want to build in natural language
+3. **Edit Code**: The Monaco editor shows the JSCAD code - edit directly or via AI
+4. **Adjust Parameters**: Use the sliders to tweak dimensions
+5. **Save Versions**: Click "Save" to create version checkpoints
+6. **Export**: Export as STL for 3D printing
+
+## JSCAD Code Format
+
+The app expects JSCAD v2 code that exports a `main()` function:
+
+```javascript
+const { cube, sphere } = require('@jscad/modeling').primitives
+const { union } = require('@jscad/modeling').booleans
+
+function main(params) {
+  const { size = 10 } = params
+  return union(
+    cube({ size }),
+    sphere({ radius: size / 2 })
+  )
+}
+
+module.exports = { main }
+```
+
+Optional `getParameterDefinitions()` for parameter UI:
+
+```javascript
+function getParameterDefinitions() {
+  return [
+    { name: 'size', type: 'float', initial: 10, min: 1, max: 100, caption: 'Size:' }
+  ]
+}
+```
+
+## Known Issues
+
+1. **Convex `_generated` folder missing**: Run `npx convex dev --once --configure=new`
+2. **JSCAD in browser**: Uses Web Worker sandbox; some advanced features may need polyfills
+3. **3D Rendering**: Currently uses Canvas 2D wireframe; WebGL renderer planned
+
+## Scripts
+
+- `bun run dev` - Start development server
+- `bun run build` - Build for production
+- `bun run start` - Start production server
+- `npx convex dev` - Start Convex development mode
+
+## License
+
+MIT
