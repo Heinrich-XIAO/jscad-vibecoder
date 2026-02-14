@@ -23,7 +23,7 @@ export const codegenRouter = router({
           })
           .optional(),
         openRouterApiKey: z.string().optional(),
-        model: z.string().default("google/gemini-2.5-pro-preview-06-05"),
+        model: z.string().default("z-ai/glm-4.7"),
         maxIterations: z.number().default(5),
       })
     )
@@ -83,34 +83,57 @@ export const codegenRouter = router({
         // Execute each tool call
         for (const toolCall of assistantMessage.tool_calls) {
           let args;
+          let parseError: string | null = null;
           try {
             args = JSON.parse(toolCall.function.arguments);
-          } catch (e) {
+          } catch (e: unknown) {
+            parseError = e instanceof Error ? e.message : String(e);
             console.error("Failed to parse tool arguments:", toolCall.function.arguments);
             args = {};
           }
-          const result = executeToolCall(
-            toolCall.function.name,
-            args,
-            finalCode
-          );
+          
+          let result;
+          let shouldRetry = false;
+          
+          if (parseError) {
+            // If JSON parsing failed, tell the AI to retry with valid JSON
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                error: `JSON parsing failed: ${parseError}. The arguments were: ${toolCall.function.arguments}. Please retry with valid JSON format for the ${toolCall.function.name} tool.`,
+              }),
+            });
+            shouldRetry = true;
+          } else {
+            result = executeToolCall(
+              toolCall.function.name,
+              args,
+              finalCode
+            );
 
-          // Update code if the tool modified it
-          if (result.updatedCode !== undefined) {
-            finalCode = result.updatedCode;
+            // Update code if the tool modified it
+            if (result.updatedCode !== undefined) {
+              finalCode = result.updatedCode;
+            }
+
+            toolResults.push({
+              toolName: toolCall.function.name,
+              args,
+              result: result.output,
+            });
+
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result.output),
+            });
           }
-
-          toolResults.push({
-            toolName: toolCall.function.name,
-            args,
-            result: result.output,
-          });
-
-          messages.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(result.output),
-          });
+          
+          // If there was a parse error, continue to next iteration to let AI retry
+          if (shouldRetry) {
+            continue;
+          }
         }
 
         // After tool execution, run auto-diagnostics if code changed
