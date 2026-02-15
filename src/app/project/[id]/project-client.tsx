@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
-import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Keyboard, Undo2, Redo2 } from "lucide-react";
+import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Undo2, Redo2 } from "lucide-react";
 import { ChatPanel } from "@/components/chat-panel";
 import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
 import { Viewport3D, type Viewport3DHandle } from "@/components/viewport-3d";
@@ -530,13 +530,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             title="Redo (Ctrl+Y)"
           >
             <Redo2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setShowShortcuts(true)}
-            className="p-2 hover:bg-secondary rounded-lg transition-colors"
-            title="Keyboard Shortcuts (?)"
-          >
-            <Keyboard className="w-5 h-5" />
           </button>
           <button
             onClick={() => setShowSettings(true)}

@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation } from "convex/react";
-import { Plus, Settings, Trash2, Clock, Box, LayoutTemplate, ChevronRight, Search, X, Keyboard } from "lucide-react";
+import { Plus, Settings, Trash2, Clock, Box, LayoutTemplate, ChevronRight, Search, X } from "lucide-react";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { useKeyboardShortcuts, type KeyboardShortcut } from "@/lib/use-keyboard-shortcuts";
@@ -168,13 +168,6 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold">JSCAD Vibecoder</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowShortcuts(true)}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
-              title="Keyboard Shortcuts (?)"
-            >
-              <Keyboard className="w-5 h-5" />
-            </button>
             <button
               onClick={() => setShowSettings(true)}
               className="p-2 hover:bg-secondary rounded-lg transition-colors"
