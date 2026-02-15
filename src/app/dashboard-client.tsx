@@ -134,16 +134,23 @@ export default function DashboardPage() {
     );
   }
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString("en-US", {
+  const formatDateTime = (timestamp?: number) => {
+    if (typeof timestamp !== "number") return "recently";
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "recently";
+
+    return date.toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
     });
   };
 
   // Filter projects based on search query
-  const filteredProjects = projects?.filter((project: { _id: string; name: string; description?: string; updatedAt: number }) => {
+  const filteredProjects = projects?.filter((project: { _id: string; _creationTime: number; name: string; description?: string; updatedAt?: number }) => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
     return (
@@ -259,7 +266,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredProjects?.map((project: { _id: string; name: string; description?: string; updatedAt: number }) => (
+            {filteredProjects?.map((project: { _id: string; _creationTime: number; name: string; description?: string; updatedAt?: number }) => (
               <div
                 key={project._id}
                 onClick={() => router.push(`/project/${project._id}`)}
@@ -283,7 +290,7 @@ export default function DashboardPage() {
                 )}
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="w-3 h-3" />
-                  <span>Updated {formatDate(project.updatedAt)}</span>
+                  <span>Updated {formatDateTime(project.updatedAt ?? project._creationTime)}</span>
                 </div>
               </div>
             ))}
