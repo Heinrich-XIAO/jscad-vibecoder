@@ -55,28 +55,22 @@ export class JscadWorker {
     // Using importScripts to load JSCAD from CDN since dynamic imports don't work in inline workers
     const workerCode = `
       // Load JSCAD modeling library from CDN
-      console.log('Worker: Loading JSCAD from CDN...');
       importScripts('https://unpkg.com/@jscad/modeling@2.12.0/dist/jscad-modeling.min.js');
       
-      console.log('Worker: JSCAD loaded, jscadModeling =', typeof jscadModeling);
       const modeling = jscadModeling;
 
       self.onmessage = function(e) {
         const { type, code, parameters } = e.data;
-        console.log('Worker: Received message', type, 'code length:', code?.length);
         
         if (type === 'evaluate') {
           try {
             if (!modeling) {
-              console.error('Worker: modeling is null!');
               self.postMessage({ 
                 type: 'error', 
                 error: 'Failed to load JSCAD modeling library' 
               });
               return;
             }
-            
-            console.log('Worker: Running code...');
             
             const mockRequire = (path) => {
               if (path === '@jscad/modeling') return modeling;
@@ -102,13 +96,11 @@ export class JscadWorker {
             // Evaluate the code in a Function constructor sandbox
             const moduleExports = {};
             const module = { exports: moduleExports };
-            console.log('Worker: Evaluating code...');
             
             const fn = new Function('require', 'module', 'exports', code);
             fn(mockRequire, module, moduleExports);
             
             const exports = module.exports;
-            console.log('Worker: exports =', Object.keys(exports));
             
             // Extract parameter definitions if available
             let parameterDefinitions = [];
@@ -122,13 +114,10 @@ export class JscadWorker {
             
             // Call main function
             if (typeof exports.main === 'function') {
-              console.log('Worker: Calling main function...');
               const result = exports.main(parameters || {});
-              console.log('Worker: main returned:', typeof result, Array.isArray(result) ? result.length : 'single');
               
               // Normalize result to array
               const geometries = Array.isArray(result) ? result : [result];
-              console.log('Worker: geometries count:', geometries.length);
               
               self.postMessage({
                 type: 'result',
@@ -142,7 +131,6 @@ export class JscadWorker {
               throw new Error('No main() function exported');
             }
           } catch (error) {
-            console.error('Worker: Error:', error.message || String(error));
             self.postMessage({
               type: 'error',
               error: error.message || String(error)

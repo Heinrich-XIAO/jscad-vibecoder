@@ -46,6 +46,7 @@ function renderGeometry(
         ctx.lineTo(p.x, p.y);
       }
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
     }
   }
@@ -134,8 +135,6 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     // Clear
     ctx.fillStyle = "#1e1e1e";
     ctx.fillRect(0, 0, w, h);
-    
-    console.log('Render: canvas size', w, 'x', h, 'geoms:', geometry?.length);
 
     // Grid
     const gridSize = 20 * zoom;
@@ -213,16 +212,13 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
 
     // Render geometries as wireframes
     if (geometry && geometry.length > 0 && !isGenerating) {
-      console.log('Viewport: rendering', geometry.length, 'geometries');
-      ctx.strokeStyle = "#00ff00";  // Bright green
-      ctx.lineWidth = 2;
-      ctx.fillStyle = "rgba(0, 255, 0, 0.1)";  // Semi-transparent green fill
+      ctx.strokeStyle = "#a5b4fc";  // Light indigo
+      ctx.lineWidth = 1;
+      ctx.fillStyle = "rgba(99, 102, 241, 0.3)";  // Semi-transparent indigo fill
 
       for (const geom of geometry) {
         renderGeometry(ctx, geom, project);
       }
-    } else {
-      console.log('Viewport: NOT rendering', geometry?.length || 0, 'geometries, generating:', isGenerating);
     }
 
     // Status text
