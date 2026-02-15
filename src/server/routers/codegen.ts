@@ -1,4 +1,6 @@
 import { z } from "zod";
+import path from "path";
+import { readFile } from "fs/promises";
 import { router, publicProcedure } from "../trpc";
 
 export const generateInputSchema = z.object({
@@ -119,6 +121,8 @@ export async function runCodegen(
   const toolResults: ToolCallRecord[] = [];
   let finalCode = currentCode || "";
   let iterations = 0;
+  let pendingRuntimeError: string | null = null;
+  let pendingDiagnosticsErrors = 0;
 
   while (iterations < maxIterations) {
     iterations++;
@@ -137,6 +141,15 @@ export async function runCodegen(
     messages.push(assistantMessage);
 
     if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+      if (pendingRuntimeError || pendingDiagnosticsErrors > 0) {
+        messages.push({
+          role: "system",
+          content:
+            "You must fix the outstanding runtime/diagnostic errors before responding. Use edit_code to correct the code.",
+        });
+        continue;
+      }
+
       if (assistantMessage.content) {
         await onEvent?.({ type: "assistant_message", content: assistantMessage.content });
       }
@@ -197,16 +210,17 @@ export async function runCodegen(
       }
 
       let toolOutput = result.output;
-      if (
-        toolCall.function.name === "edit_code" ||
-        toolCall.function.name === "write_code"
-      ) {
-        const runtime = await runJscadRuntime(finalCode);
-        if (toolOutput && typeof toolOutput === "object") {
-          toolOutput = { ...toolOutput, runtime };
-        } else {
-          toolOutput = { result: toolOutput, runtime };
-        }
+       if (
+         toolCall.function.name === "edit_code" ||
+         toolCall.function.name === "write_code"
+       ) {
+         const runtime = await runJscadRuntime(finalCode);
+         pendingRuntimeError = runtime.ok ? null : runtime.error || "Unknown error";
+         if (toolOutput && typeof toolOutput === "object") {
+           toolOutput = { ...toolOutput, runtime };
+         } else {
+           toolOutput = { result: toolOutput, runtime };
+         }
         if (!runtime.ok && runtime.error) {
           messages.push({
             role: "system",
@@ -241,13 +255,14 @@ export async function runCodegen(
     const lastToolNames = (assistantMessage.tool_calls || []).map(
       (tc: { function: { name: string } }) => tc.function.name
     );
-    if (
-      lastToolNames.includes("edit_code") ||
-      lastToolNames.includes("write_code")
-    ) {
-      const diagnostics = runDiagnostics(finalCode);
-      await onEvent?.({
-        type: "diagnostics",
+     if (
+       lastToolNames.includes("edit_code") ||
+       lastToolNames.includes("write_code")
+     ) {
+       const diagnostics = runDiagnostics(finalCode);
+       pendingDiagnosticsErrors = diagnostics.errors;
+       await onEvent?.({
+         type: "diagnostics",
         iteration: iterations,
         errors: diagnostics.errors,
         warnings: diagnostics.warnings,
@@ -266,11 +281,68 @@ export async function runCodegen(
     code: finalCode,
     toolResults,
     iterations,
-    assistantMessage:
-      messages[messages.length - 1]?.role === "assistant"
-        ? (messages[messages.length - 1] as { content?: string })?.content
-        : undefined,
+    assistantMessage: undefined,
   };
+
+  let finalAssistantContent =
+    messages[messages.length - 1]?.role === "assistant"
+      ? (messages[messages.length - 1] as { content?: string })?.content
+      : undefined;
+
+  if (!finalAssistantContent) {
+    const finalResponse = await callOpenRouter({
+      apiKey,
+      model,
+      messages: [
+        ...messages,
+        {
+          role: "system",
+          content:
+            "Provide a final response to the user. Do not call tools. Summarize what you did and what happened.",
+        },
+      ],
+      tools,
+      toolChoice: "none",
+    });
+
+    const finalMessage = finalResponse.choices[0]?.message;
+    if (finalMessage?.content) {
+      finalAssistantContent = finalMessage.content;
+      messages.push({ role: "assistant", content: finalMessage.content });
+      await onEvent?.({ type: "assistant_message", content: finalMessage.content });
+    }
+  }
+
+  if (!finalAssistantContent) {
+    const forcedResponse = await callOpenRouter({
+      apiKey,
+      model,
+      messages: [
+        ...messages,
+        {
+          role: "system",
+          content:
+            "You did not provide a final response. Respond now with a concise user-facing message. Do not call tools.",
+        },
+      ],
+      tools,
+      toolChoice: "none",
+    });
+
+    const forcedMessage = forcedResponse.choices[0]?.message;
+    if (forcedMessage?.content) {
+      finalAssistantContent = forcedMessage.content;
+      messages.push({ role: "assistant", content: forcedMessage.content });
+      await onEvent?.({ type: "assistant_message", content: forcedMessage.content });
+    }
+  }
+
+  if (!finalAssistantContent) {
+    finalAssistantContent = "Ready when you are. What should I do next?";
+    await onEvent?.({ type: "assistant_message", content: finalAssistantContent });
+  }
+
+  payload.assistantMessage = finalAssistantContent;
 
   await onEvent?.({ type: "done", payload });
   return payload;
@@ -297,6 +369,7 @@ async function callOpenRouter(params: {
   model: string;
   messages: OpenRouterMessage[];
   tools: unknown[];
+  toolChoice?: "auto" | "none";
 }) {
   const response = await fetch(
     "https://openrouter.ai/api/v1/chat/completions",
@@ -312,7 +385,7 @@ async function callOpenRouter(params: {
         model: params.model,
         messages: params.messages,
         tools: params.tools,
-        tool_choice: "auto",
+        tool_choice: params.toolChoice ?? "auto",
         temperature: 0.3,
         max_tokens: 4096,
       }),
@@ -681,7 +754,31 @@ const main = () => { return cuboid({ size: [10, 10, 10] }) }
 module.exports = { main }
 \`\`\`
 
-For parametric models, also export \`getParameterDefinitions\`:
+For parametric models, you MUST export \`getParameterDefinitions\` and define \`main(params)\` that uses those params. The UI only shows sliders when \`getParameterDefinitions\` exists, and parameter values only take effect when \`main\` reads the params.
+
+Parametric examples (correct):
+\`\`\`js
+const getParameterDefinitions = () => [
+  { name: 'radius', type: 'float', initial: 10, caption: 'Radius' },
+  { name: 'segments', type: 'int', initial: 32, caption: 'Segments' },
+]
+const main = (params) => {
+  const { radius = 10, segments = 32 } = params || {}
+  return sphere({ radius, segments })
+}
+module.exports = { main, getParameterDefinitions }
+\`\`\`
+\`\`\`js
+const getParameterDefinitions = () => [
+  { name: 'width', type: 'float', initial: 20, caption: 'Width' },
+  { name: 'height', type: 'float', initial: 5, caption: 'Height' },
+]
+const main = (params) => {
+  const { width = 20, height = 5 } = params || {}
+  return roundedCylinder({ radius: width / 2, height, roundRadius: 1, segments: 32 })
+}
+module.exports = { main, getParameterDefinitions }
+\`\`\`
 \`\`\`js
 const getParameterDefinitions = () => [
   { name: 'width', type: 'float', initial: 10, caption: 'Width' },
@@ -701,12 +798,51 @@ module.exports = { main, getParameterDefinitions }
 8. Use list_variables to understand the current code structure
 9. Use split_components to keep code organized for complex models
 
+## External Libraries
+- You may load remote helper libraries via include("https://...") for side-effect scripts.
+- You may require remote modules via require("https://...") when they export functions.
+- GitHub blob URLs are supported and converted to raw URLs.
+- Local libraries are available under /jscad-libs/... and can be include()'d.
+- Legacy OpenJSCAD v1 libraries can be used by including /jscad-libs/compat/v1.js first.
+- Prefer using the provided libraries whenever they cover the requested part/model.
+- Available local libraries:
+  - /jscad-libs/mechanics/airfoilNaca.jscad
+  - /jscad-libs/mechanics/aluprofile.jscad
+  - /jscad-libs/mechanics/basicSplitWall.jscad
+  - /jscad-libs/mechanics/bearingLM8LUU.jscad
+  - /jscad-libs/mechanics/bearingLM8UU.jscad
+  - /jscad-libs/mechanics/bearingblockSMAUU.jscad
+  - /jscad-libs/mechanics/cfflange.jscad
+  - /jscad-libs/mechanics/gears.jscad
+  - /jscad-libs/mechanics/isothread.jscad
+  - /jscad-libs/mechanics/motedisDelrin.jscad
+  - /jscad-libs/mechanics/motedisKFL08.jscad
+  - /jscad-libs/mechanics/motorElectric_Unknown1.jscad
+  - /jscad-libs/mechanics/screwclamp.jscad
+  - /jscad-libs/mechanics/servoSG90.jscad
+  - /jscad-libs/mechanics/stepper28byj_48.jscad
+  - /jscad-libs/mechanics/stepperNema17.jscad
+  - /jscad-libs/electronics/connectors/M24308_4.jscad
+  - /jscad-libs/electronics/embedded/raspberrypibplus.jscad
+  - /jscad-libs/electronics/forkedlightbarrier/hy86n.jscad
+  - /jscad-libs/electronics/lasermodule/001_405_20W.jscad
+  - /jscad-libs/electronics/lasermodule/tocan.jscad
+  - /jscad-libs/electronics/ultrasonicsensors/hcsr04.jscad
+- Prefer JSCAD v2-compatible libraries; avoid legacy v1-only CSG libraries unless the user asks for them.
+
+## Tool Enforcement (Critical)
+- If the user requests a model, code, or modification, you MUST call the appropriate tool (write_code or edit_code).
+- NEVER paste or output full JSCAD code in the assistant message.
+- If you do not call a tool, your response must be plain text guidance only (no code blocks).
+- When the user says "make" or "create" a model (e.g. "make a gear"), call write_code.
+
 ## Important Rules
 - Always use require() syntax for JSCAD imports (not ES6 import)
 - All measurements are in millimeters (mm) by default
 - Use segments: 32 for smooth curves (default is often too low)
 - Shapes are always CENTERED at 0,0,0 before translation; do NOT place shapes with a corner at the origin
 - When scaling a shape, remember you may need to adjust its translation to keep the intended position
+- If you destructure params with defaults, use the destructured variables in geometry (do NOT read params.* directly or defaults won't apply)
 - ALWAYS use FUNCTION DECLARATIONS (not const/let arrow functions) for helper functions - they must be defined BEFORE main() since JavaScript does not hoist const/let function expressions. Correct: \`function myHelper() {}\`. Incorrect: \`const myHelper = () => {}\`
 - Define all helper functions BEFORE the main function
 - Explain what you're doing in your text responses
@@ -736,10 +872,22 @@ function executeToolCall(
 ): ToolResult {
   switch (toolName) {
     case "write_code":
-      return {
-        output: { success: true, description: args.description },
-        updatedCode: args.code as string,
-      };
+      {
+        const code = args.code as string;
+        const hasMain = typeof code === "string" && /module\.exports\s*=\s*\{[^}]*\bmain\b[^}]*\}/.test(code);
+        if (!hasMain) {
+          return {
+            output: {
+              success: false,
+              error: "write_code must return a full JSCAD module exporting main (and getParameterDefinitions when parametric). Do not return JSON arrays or fragments.",
+            },
+          };
+        }
+        return {
+          output: { success: true, description: args.description },
+          updatedCode: code,
+        };
+      }
 
     case "edit_code": {
       let code = currentCode;
@@ -914,11 +1062,200 @@ function executeToolCall(
 
 // --- Diagnostics ---
 
+const localLibsRoot = path.resolve(process.cwd(), "public", "jscad-libs");
+
+function normalizeRemoteUrl(url: string) {
+  const match = url.match(
+    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/
+  );
+  if (match) {
+    return `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${match[3]}/${match[4]}`;
+  }
+  return url;
+}
+
+function isRemoteSpec(spec: string) {
+  return spec.startsWith("http://") || spec.startsWith("https://");
+}
+
+function isLocalSpec(spec: string) {
+  return spec.startsWith("/jscad-libs/") || spec.startsWith("jscad-libs/");
+}
+
+function normalizeLocalSpec(spec: string) {
+  return spec.startsWith("/") ? spec : `/${spec}`;
+}
+
+function toLocalPath(spec: string) {
+  const normalized = normalizeLocalSpec(spec).replace(/^\/jscad-libs\//, "");
+  const resolved = path.resolve(localLibsRoot, normalized);
+  if (!resolved.startsWith(localLibsRoot)) {
+    throw new Error(`Local module path escapes library root: ${spec}`);
+  }
+  return resolved;
+}
+
+function toLocalModuleId(spec: string) {
+  return `file://${toLocalPath(spec)}`;
+}
+
+function resolveModuleSpec(baseId: string | undefined, spec: string) {
+  if (isRemoteSpec(spec)) return normalizeRemoteUrl(spec);
+  if (isLocalSpec(spec)) return toLocalModuleId(spec);
+
+  if (spec.startsWith("./") || spec.startsWith("../")) {
+    if (!baseId) return spec;
+    if (baseId.startsWith("file://")) {
+      const basePath = baseId.replace("file://", "");
+      return `file://${path.resolve(path.dirname(basePath), spec)}`;
+    }
+    return normalizeRemoteUrl(new URL(spec, baseId).toString());
+  }
+
+  return spec;
+}
+
+function extractModuleSpecs(code: string) {
+  const specs: string[] = [];
+  const regex = /\b(?:require|include)\(\s*['"]([^'"]+)['"]\s*\)/g;
+  let match: RegExpExecArray | null = null;
+  while ((match = regex.exec(code))) {
+    const spec = match[1].trim();
+    if (isRemoteSpec(spec) || isLocalSpec(spec)) {
+      specs.push(spec);
+    } else if (spec.startsWith("./") || spec.startsWith("../")) {
+      specs.push(spec);
+    }
+  }
+  return specs;
+}
+
+async function preloadExternalModules(code: string) {
+  const sources = new Map<string, string>();
+  const queue: Array<{ spec: string; baseId?: string }> = [];
+
+  for (const spec of extractModuleSpecs(code)) {
+    if (isRemoteSpec(spec) || isLocalSpec(spec)) queue.push({ spec });
+  }
+
+  while (queue.length > 0) {
+    const entry = queue.shift();
+    if (!entry) continue;
+    const resolved = resolveModuleSpec(entry.baseId, entry.spec);
+
+    if (sources.has(resolved)) continue;
+
+    let text: string;
+    if (resolved.startsWith("file://")) {
+      text = await readFile(resolved.replace("file://", ""), "utf8");
+    } else {
+      const response = await fetch(resolved);
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch remote module: ${resolved} (${response.status})`
+        );
+      }
+      text = await response.text();
+    }
+
+    sources.set(resolved, text);
+
+    for (const spec of extractModuleSpecs(text)) {
+      if (isRemoteSpec(spec) || isLocalSpec(spec)) {
+        queue.push({ spec });
+      } else if (spec.startsWith("./") || spec.startsWith("../")) {
+        queue.push({ spec, baseId: resolved });
+      }
+    }
+  }
+
+  return sources;
+}
+
 async function runJscadRuntime(
   code: string
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const jscad = await import("@jscad/modeling");
+    const remoteModuleSources = await preloadExternalModules(code);
+    const remoteModuleCache = new Map<string, { exports: Record<string, unknown> }>();
+    const evaluating = new Set<string>();
+    const runtimeGlobal = globalThis as unknown as Record<string, unknown>;
+    if (!("window" in runtimeGlobal)) {
+      runtimeGlobal.window = runtimeGlobal;
+    }
+    if (!runtimeGlobal.window || typeof runtimeGlobal.window !== "object") {
+      runtimeGlobal.window = {};
+    }
+    if (!("location" in runtimeGlobal.window)) {
+      runtimeGlobal.window.location = { protocol: "https:", origin: "https://localhost" };
+    }
+
+    const evaluateRemoteModule = (
+      spec: string,
+      baseId?: string
+    ): Record<string, unknown> => {
+      const normalized = resolveModuleSpec(baseId, spec);
+      const cached = remoteModuleCache.get(normalized);
+      if (cached) return cached.exports;
+      if (evaluating.has(normalized)) {
+        throw new Error(`Circular remote module reference: ${normalized}`);
+      }
+
+      const source = remoteModuleSources.get(normalized);
+      if (!source) {
+        throw new Error(`External module not preloaded: ${normalized}`);
+      }
+
+      evaluating.add(normalized);
+      const remoteModule = { exports: {} as Record<string, unknown> };
+      remoteModuleCache.set(normalized, remoteModule);
+
+      const localRequire = (path: string) => {
+        if (path === "@jscad/modeling") return jscad;
+        if (path.startsWith("@jscad/modeling/")) {
+          const subpath = path.replace("@jscad/modeling/", "");
+          const parts = subpath.split("/");
+          let result: unknown = jscad as Record<string, unknown>;
+          for (const part of parts) {
+            result = (result as Record<string, unknown>)?.[part];
+          }
+          return result;
+        }
+        if (isRemoteSpec(path) || isLocalSpec(path)) {
+          return evaluateRemoteModule(path);
+        }
+        if (path.startsWith("./") || path.startsWith("../")) {
+          return evaluateRemoteModule(path, normalized);
+        }
+        throw new Error(`Unknown module: ${path}`);
+      };
+
+      const include = (path: string) => {
+        if (!path) return;
+        if (isRemoteSpec(path) || isLocalSpec(path)) {
+          evaluateRemoteModule(path);
+          return;
+        }
+        if (path.startsWith("./") || path.startsWith("../")) {
+          evaluateRemoteModule(path, normalized);
+          return;
+        }
+        throw new Error(`include() requires a remote URL or /jscad-libs path: ${path}`);
+      };
+
+      const fn = new Function(
+        "require",
+        "module",
+        "exports",
+        "include",
+        "window",
+        source
+      );
+      fn(localRequire, remoteModule, remoteModule.exports, include, runtimeGlobal.window);
+      evaluating.delete(normalized);
+      return remoteModule.exports;
+    };
 
     const mockRequire = (path: string) => {
       if (path === "@jscad/modeling") return jscad;
@@ -931,22 +1268,60 @@ async function runJscadRuntime(
         }
         return result;
       }
+      if (isRemoteSpec(path) || isLocalSpec(path)) {
+        return evaluateRemoteModule(path);
+      }
       throw new Error(`Unknown module: ${path}`);
     };
 
+    const include = (path: string) => {
+      if (!path) return;
+      if (isRemoteSpec(path) || isLocalSpec(path)) {
+        evaluateRemoteModule(path);
+        return;
+      }
+      throw new Error(`include() requires a remote URL or /jscad-libs path: ${path}`);
+    };
+
     const cjsModule = { exports: {} as Record<string, unknown> };
-    const fn = new Function("require", "module", "exports", code);
-    fn(mockRequire, cjsModule, cjsModule.exports);
+    const fn = new Function("require", "module", "exports", "include", code);
+    fn(mockRequire, cjsModule, cjsModule.exports, include);
 
     const exports = cjsModule.exports as {
       main?: (params?: Record<string, unknown>) => unknown;
+      getParameterDefinitions?: () => Array<{
+        name?: string;
+        initial?: unknown;
+        default?: unknown;
+      }>;
     };
 
     if (typeof exports.main !== "function") {
       return { ok: false, error: "No main() function exported" };
     }
 
-    exports.main({});
+    let runtimeParams: Record<string, unknown> = {};
+    if (typeof exports.getParameterDefinitions === "function") {
+      const definitions = exports.getParameterDefinitions();
+      if (Array.isArray(definitions)) {
+        runtimeParams = definitions.reduce<Record<string, unknown>>(
+          (acc, def) => {
+            if (!def || typeof def !== "object") return acc;
+            const name = def.name;
+            if (!name) return acc;
+            if (def.initial !== undefined) {
+              acc[name] = def.initial;
+            } else if (def.default !== undefined) {
+              acc[name] = def.default;
+            }
+            return acc;
+          },
+          {}
+        );
+      }
+    }
+
+    exports.main(runtimeParams);
     return { ok: true };
   } catch (error) {
     return {

@@ -58,6 +58,89 @@ export class JscadWorker {
       importScripts('https://unpkg.com/@jscad/modeling@2.12.0/dist/jscad-modeling.min.js');
       
       const modeling = jscadModeling;
+      self.window = self;
+      if (!self.window.location) {
+        self.window.location = self.location || { protocol: 'https:', origin: 'https://localhost' };
+      }
+
+      const remoteModuleCache = new Map();
+
+      const normalizeRemoteUrl = (url) => {
+        const match = url.match(/^https?:\\/\\/github\\.com\\/([^/]+)\\/([^/]+)\\/blob\\/([^/]+)\\/(.+)$/);
+        if (match) {
+          return 'https://raw.githubusercontent.com/' + match[1] + '/' + match[2] + '/' + match[3] + '/' + match[4];
+        }
+        return url;
+      };
+
+      const isRemotePath = (path) => /^https?:\/\//.test(path);
+      const isLocalPath = (path) => path.startsWith('/jscad-libs/') || path.startsWith('jscad-libs/');
+
+      const resolveRemoteUrl = (baseUrl, spec) => new URL(spec, baseUrl).toString();
+
+      const normalizeModuleUrl = (spec, baseUrl) => {
+        if (isRemotePath(spec)) return normalizeRemoteUrl(spec);
+        if (isLocalPath(spec)) {
+          const normalized = spec.startsWith('/') ? spec : '/' + spec;
+          return new URL(normalized, self.location.origin).toString();
+        }
+        if (baseUrl) return resolveRemoteUrl(baseUrl, spec);
+        return spec;
+      };
+
+      const fetchRemoteTextSync = (url) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', url, false);
+        xhr.send(null);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          return xhr.responseText;
+        }
+        throw new Error('Failed to fetch remote module: ' + url + ' (' + xhr.status + ')');
+      };
+
+      const evaluateRemoteModule = (url, baseUrl) => {
+        const normalized = normalizeModuleUrl(url, baseUrl);
+        if (remoteModuleCache.has(normalized)) {
+          return remoteModuleCache.get(normalized).exports;
+        }
+
+        const code = fetchRemoteTextSync(normalized);
+        const module = { exports: {} };
+        remoteModuleCache.set(normalized, module);
+
+        const localRequire = (path) => {
+          if (path === '@jscad/modeling') return modeling;
+          if (path.startsWith('@jscad/modeling/')) {
+            const subpath = path.replace('@jscad/modeling/', '');
+            const parts = subpath.split('/');
+            let result = modeling;
+            for (const part of parts) {
+              result = result?.[part];
+            }
+            return result;
+          }
+          if (isRemotePath(path) || isLocalPath(path) || path.startsWith('./') || path.startsWith('../')) {
+            const resolved = normalizeModuleUrl(path, normalized);
+            return evaluateRemoteModule(resolved);
+          }
+          throw new Error('Unknown module: ' + path);
+        };
+
+        const include = (path) => {
+          if (!path) return;
+          if (isRemotePath(path) || isLocalPath(path) || path.startsWith('./') || path.startsWith('../')) {
+            const resolved = normalizeModuleUrl(path, normalized);
+            evaluateRemoteModule(resolved);
+            return;
+          }
+          throw new Error('include() only supports remote URLs or /jscad-libs paths');
+        };
+
+        const fn = new Function('require', 'module', 'exports', 'include', 'window', code);
+        fn(localRequire, module, module.exports, include, self);
+
+        return module.exports;
+      };
 
       self.onmessage = function(e) {
         const { type, code, parameters } = e.data;
@@ -83,6 +166,9 @@ export class JscadWorker {
                 }
                 return result;
               }
+              if (isRemotePath(path) || isLocalPath(path)) {
+                return evaluateRemoteModule(path);
+              }
               if (path === '@jscad/modeling/src/primitives') return modeling?.primitives;
               if (path === '@jscad/modeling/src/booleans') return modeling?.booleans;
               if (path === '@jscad/modeling/src/transforms') return modeling?.transforms;
@@ -93,12 +179,21 @@ export class JscadWorker {
               throw new Error('Unknown module: ' + path);
             };
 
+            const include = (path) => {
+              if (!path) return;
+              if (isRemotePath(path) || isLocalPath(path)) {
+                evaluateRemoteModule(path);
+                return;
+              }
+              throw new Error('include() only supports remote URLs or /jscad-libs paths');
+            };
+
             // Evaluate the code in a Function constructor sandbox
             const moduleExports = {};
             const module = { exports: moduleExports };
             
-            const fn = new Function('require', 'module', 'exports', code);
-            fn(mockRequire, module, moduleExports);
+            const fn = new Function('require', 'module', 'exports', 'include', code);
+            fn(mockRequire, module, moduleExports, include);
             
             const exports = module.exports;
             
@@ -144,6 +239,10 @@ export class JscadWorker {
     this.worker = new Worker(URL.createObjectURL(blob));
 
     this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+      if (e.data.type === "parameters") {
+        return;
+      }
+
       if (e.data.type === "error") {
         this.pendingReject?.(new Error(e.data.error));
       } else {
