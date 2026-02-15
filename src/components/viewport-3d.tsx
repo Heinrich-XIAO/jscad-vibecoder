@@ -294,10 +294,20 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
 
   const handleMouseUp = () => setIsDragging(false);
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    setZoom((z) => Math.max(0.1, Math.min(5, z - e.deltaY * 0.001)));
-  };
+  const handleWheel = useCallback((event: WheelEvent) => {
+    event.preventDefault();
+    setZoom((z) => Math.max(0.1, Math.min(5, z - event.deltaY * 0.001)));
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", handleWheel);
+    };
+  }, [handleWheel]);
 
   return (
     <canvas
@@ -307,7 +317,6 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
     />
   );
 });
