@@ -391,6 +391,7 @@ async function callOpenRouter(params: {
         messages: params.messages,
         tools: params.tools,
         tool_choice: params.toolChoice ?? "auto",
+        provider: { sort: "price" },
         temperature: 0.3,
         max_tokens: 4096,
       }),
@@ -430,6 +431,7 @@ async function callOpenRouterStream(
         messages: params.messages,
         tools: params.tools,
         tool_choice: params.toolChoice ?? "auto",
+        provider: { sort: "price" },
         temperature: 0.3,
         max_tokens: 4096,
         stream: true,
@@ -968,6 +970,38 @@ module.exports = { main, getParameterDefinitions }
       const gear = new window.jscad.tspi.involuteGear(printerSettings, { module: 2, teethNumber: 20, thickness: 6, centerholeRadius: 5 })
       return gear.getModel()
     }
+
+Good write_code output (gear library):
+\`\`\`js
+include('/jscad-libs/mechanics/gears.jscad')
+function getParameterDefinitions() {
+  return [
+    { name: 'module', type: 'float', initial: 2, caption: 'Module' },
+    { name: 'teeth', type: 'int', initial: 20, caption: 'Teeth' },
+    { name: 'thickness', type: 'float', initial: 6, caption: 'Thickness' },
+    { name: 'centerhole', type: 'float', initial: 5, caption: 'Center hole' },
+  ]
+}
+function main(params) {
+  const { module = 2, teeth = 20, thickness = 6, centerhole = 5 } = params || {}
+  const printerSettings = {
+    scale: 1,
+    correctionInsideDiameter: 0,
+    correctionOutsideDiameter: 0,
+    correctionInsideDiameterMoving: 0,
+    correctionOutsideDiameterMoving: 0,
+    resolutionCircle: 360,
+  }
+  const gear = new window.jscad.tspi.involuteGear(printerSettings, {
+    module,
+    teethNumber: teeth,
+    thickness,
+    centerholeRadius: centerhole,
+  })
+  return gear.getModel()
+}
+module.exports = { main, getParameterDefinitions }
+\`\`\`
 
 ## Tool Enforcement (Critical)
 - If the user requests a model, code, or modification, you MUST call the appropriate tool (write_code or edit_code).

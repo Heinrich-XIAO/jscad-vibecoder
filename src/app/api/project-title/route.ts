@@ -52,6 +52,7 @@ export async function POST(req: Request) {
             },
             { role: "user", content: prompt },
           ],
+          provider: { sort: "price" },
           temperature: 0.2,
           max_tokens: 32,
         }),

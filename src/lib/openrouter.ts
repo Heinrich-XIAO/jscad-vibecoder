@@ -50,12 +50,10 @@ export function saveOpenRouterSettings(
 
 export const AVAILABLE_MODELS = [
   { id: "z-ai/glm-4.7", name: "GLM-4.7", provider: "Z-AI" },
-  { id: "google/gemini-2.5-pro-preview-06-05", name: "Gemini 2.5 Pro", provider: "Google" },
-  { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash", provider: "Google" },
+  { id: "google/gemini-3-flash-high", name: "Gemini 3 Flash High", provider: "Google" },
+  { id: "google/gemini-3-flash-low", name: "Gemini 3 Flash Low", provider: "Google" },
+  { id: "openai/gpt-5.2-codex", name: "GPT-5.2 Codex", provider: "OpenAI" },
   { id: "anthropic/claude-sonnet-4.5", name: "Claude Sonnet 4.5", provider: "Anthropic" },
-  { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", provider: "Anthropic" },
-  { id: "anthropic/claude-opus-4", name: "Claude Opus 4", provider: "Anthropic" },
-  { id: "openai/gpt-4o", name: "GPT-4o", provider: "OpenAI" },
-  { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI" },
-  { id: "deepseek/deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek" },
+  { id: "anthropic/claude-opus-4.6", name: "Claude Opus 4.6", provider: "Anthropic" },
+  { id: "moonshotai/kimi-k2.5", name: "Kimi K2.5", provider: "Moonshot" },
 ] as const;
