@@ -62,6 +62,14 @@ export class JscadWorker {
       if (!self.window.location) {
         self.window.location = self.location || { protocol: 'https:', origin: 'https://localhost' };
       }
+      const baseOrigin =
+        (self.location && self.location.origin && self.location.origin !== 'null'
+          ? self.location.origin
+          : undefined) ||
+        (self.window.location && self.window.location.origin && self.window.location.origin !== 'null'
+          ? self.window.location.origin
+          : undefined) ||
+        'https://localhost';
 
       const remoteModuleCache = new Map();
 
@@ -82,7 +90,7 @@ export class JscadWorker {
         if (isRemotePath(spec)) return normalizeRemoteUrl(spec);
         if (isLocalPath(spec)) {
           const normalized = spec.startsWith('/') ? spec : '/' + spec;
-          return new URL(normalized, self.location.origin).toString();
+          return new URL(normalized, baseOrigin).toString();
         }
         if (baseUrl) return resolveRemoteUrl(baseUrl, spec);
         return spec;

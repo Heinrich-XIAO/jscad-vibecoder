@@ -53,6 +53,15 @@ const wrap = (geometry) => {
     setColor(color) {
       return wrap(colors.colorize(color, this));
     },
+    union(other) {
+      return wrap(booleans.union(this, other));
+    },
+    subtract(other) {
+      return wrap(booleans.subtract(this, other));
+    },
+    intersect(other) {
+      return wrap(booleans.intersect(this, other));
+    },
     unionForNonIntersecting(other) {
       return wrap(booleans.union(this, other));
     },
