@@ -22,6 +22,8 @@
 - ✅ **OBJ Export Support** - Full OBJ format export with vertex and face serialization
 - ✅ **STL Thumbnail Generation** - Canvas-based 3D preview with lighting and depth sorting
 - ✅ **Templates Gallery** - Dashboard section with starter templates (Basic Box, Rounded Box, Mounting Bracket)
+- ✅ **Remote Library Loading** - `include()` and `require()` support for URL-based JSCAD helpers
+- ✅ **Legacy Library Compatibility** - v1-compatible shims + /jscad-libs mechanics/electronics bundles
 - ✅ **Geometry Analysis Tools:**
   - Real-time measurements (dimensions, volume, surface area, polygon count)
   - 3D printability analysis (manifold checks, thin walls, overhangs)
@@ -42,6 +44,8 @@
 - ✅ **Undo/Redo** - Full code history tracking (50 states max) with UI buttons
 - ✅ **Draft Autosave (No New Version)** - Auto-saves edited code to current version after run (5s delay) and when AI prompt completes
 - ✅ **Streaming Tool Feedback** - Chat shows live tool execution status and results during AI runs
+- ✅ **Auto Project Naming** - Default project names are replaced using the first chat prompt
+- ✅ **AI Response Retry Button** - Retry the last user prompt directly from each assistant message
 
 ### AI Features
 - ✅ **14 AI Tools** - Full tool system implemented:
@@ -59,7 +63,7 @@
   - `diff_versions` - Version comparison
   - `split_components` - Component management
   - `render_preview` - Preview generation
-- ✅ **Runtime JSCAD Check After AI Edits** - Auto-runs JSCAD after edit/write tool calls and reports errors
+- ✅ **Runtime JSCAD Check After AI Edits** - Auto-runs JSCAD after edit/write tool calls using parameter defaults and reports errors
 
 ---
 

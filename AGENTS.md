@@ -4,6 +4,8 @@
 * **ALWAYS** use the `question` tool to present options for the next steps instead of asking "Would you like me to..." in the text.
 * **EXCEPTION:** Do NOT use the `question` tool if you have no relevant suggestions or choices to offer.
 * **EXCEPTION (Codex models):** If the active model is Codex (for example, `gpt-5.3-codex`), responses may be completed directly without using the `question` tool.
+* **ALWAYS** send a final user-facing response after any tool calls. Tool output alone is not a response.
+* If a tool call fails or returns empty data, still respond with what happened and what you did next.
 
 ## Subagent Policy
 * If you are Opus 4.5 or another Anthropic model, do not spin up subagents since that would cost a lot of money.
@@ -14,6 +16,9 @@
 * Understand the current tech stack and architecture
 * Review known issues and next steps
 * Update PROGRESS.md when completing features
+
+## System Prompt
+* The project system prompt lives in `src/server/routers/codegen.ts` inside `buildSystemPrompt(...)`.
 
 ## Mistake Log
 * If you make a mistake that costs a significant amount of time, write it down in this file for future agents.
