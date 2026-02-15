@@ -1,6 +1,23 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../trpc";
 
+export const generateInputSchema = z.object({
+  prompt: z.string(),
+  currentCode: z.string().optional(),
+  projectContext: z
+    .object({
+      projectName: z.string().optional(),
+      previousPrompts: z.array(z.string()).optional(),
+      parameters: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+  openRouterApiKey: z.string().optional(),
+  model: z.string().default("z-ai/glm-4.7"),
+  maxIterations: z.number().default(5),
+});
+
+export type GenerateInput = z.infer<typeof generateInputSchema>;
+
 /**
  * AI code generation router — handles OpenRouter API calls
  * and the 14-tool agent system for JSCAD vibecoding.
@@ -11,159 +28,8 @@ export const codegenRouter = router({
    * This is the main AI endpoint that orchestrates the tool-calling loop.
    */
   generate: publicProcedure
-    .input(
-      z.object({
-        prompt: z.string(),
-        currentCode: z.string().optional(),
-        projectContext: z
-          .object({
-            projectName: z.string().optional(),
-            previousPrompts: z.array(z.string()).optional(),
-            parameters: z.record(z.string(), z.unknown()).optional(),
-          })
-          .optional(),
-        openRouterApiKey: z.string().optional(),
-        model: z.string().default("z-ai/glm-4.7"),
-        maxIterations: z.number().default(5),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const {
-        prompt,
-        currentCode,
-        projectContext,
-        openRouterApiKey,
-        model,
-        maxIterations,
-      } = input;
-
-      const apiKey = openRouterApiKey || process.env.OPENROUTER_API_KEY;
-      if (!apiKey) {
-        throw new Error(
-          "OpenRouter API key is missing. Please configure it in Settings or on the server."
-        );
-      }
-
-      const tools = buildToolDefinitions();
-      const systemPrompt = buildSystemPrompt(currentCode, projectContext);
-
-      const messages: OpenRouterMessage[] = [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ];
-
-      const toolResults: ToolCallRecord[] = [];
-      let finalCode = currentCode || "";
-      let iterations = 0;
-
-      // Agent loop: call LLM, execute tool calls, feed results back
-      while (iterations < maxIterations) {
-        iterations++;
-
-        const response = await callOpenRouter({
-          apiKey,
-          model,
-          messages,
-          tools,
-        });
-
-        const assistantMessage = response.choices[0]?.message;
-        if (!assistantMessage) break;
-
-        messages.push(assistantMessage);
-
-        // If no tool calls, the AI is done
-        if (
-          !assistantMessage.tool_calls ||
-          assistantMessage.tool_calls.length === 0
-        ) {
-          break;
-        }
-
-        // Execute each tool call
-        for (const toolCall of assistantMessage.tool_calls) {
-          let args;
-          let parseError: string | null = null;
-          try {
-            args = JSON.parse(toolCall.function.arguments);
-          } catch (e: unknown) {
-            parseError = e instanceof Error ? e.message : String(e);
-            console.error("Failed to parse tool arguments:", toolCall.function.arguments);
-            args = {};
-          }
-          
-          let result;
-          let shouldRetry = false;
-          
-          if (parseError) {
-            // If JSON parsing failed, tell the AI to retry with valid JSON
-            messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify({
-                error: `JSON parsing failed: ${parseError}. The arguments were: ${toolCall.function.arguments}. Please retry with valid JSON format for the ${toolCall.function.name} tool.`,
-              }),
-            });
-            shouldRetry = true;
-          } else {
-            result = executeToolCall(
-              toolCall.function.name,
-              args,
-              finalCode
-            );
-
-            // Update code if the tool modified it
-            if (result.updatedCode !== undefined) {
-              finalCode = result.updatedCode;
-            }
-
-            toolResults.push({
-              toolName: toolCall.function.name,
-              args,
-              result: result.output,
-            });
-
-            messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(result.output),
-            });
-          }
-          
-          // If there was a parse error, continue to next iteration to let AI retry
-          if (shouldRetry) {
-            continue;
-          }
-        }
-
-        // After tool execution, run auto-diagnostics if code changed
-        const lastToolNames = (assistantMessage.tool_calls || []).map(
-          (tc: { function: { name: string } }) => tc.function.name
-        );
-        if (
-          lastToolNames.includes("edit_code") ||
-          lastToolNames.includes("write_code")
-        ) {
-          const diagnostics = runDiagnostics(finalCode);
-          if (diagnostics.errors > 0) {
-            messages.push({
-              role: "system",
-              content: `Auto-diagnostics detected ${diagnostics.errors} error(s):\n${JSON.stringify(diagnostics.diagnostics, null, 2)}\nPlease fix these issues.`,
-            });
-          }
-        }
-      }
-
-      return {
-        code: finalCode,
-        toolResults,
-        iterations,
-        assistantMessage:
-          messages[messages.length - 1]?.role === "assistant"
-            ? (messages[messages.length - 1] as { content?: string })?.content
-            : undefined,
-      };
-    }),
+    .input(generateInputSchema)
+    .mutation(async ({ input }) => runCodegen(input)),
 });
 
 // --- Types ---
@@ -183,6 +49,231 @@ interface ToolCallRecord {
   toolName: string;
   args: Record<string, unknown>;
   result: unknown;
+}
+
+export interface GenerateResult {
+  code: string;
+  toolResults: ToolCallRecord[];
+  iterations: number;
+  assistantMessage?: string;
+}
+
+export type GenerateStreamEvent =
+  | { type: "iteration_started"; iteration: number }
+  | {
+      type: "tool_call_started";
+      iteration: number;
+      index: number;
+      total: number;
+      toolName: string;
+      args: Record<string, unknown>;
+    }
+  | {
+      type: "tool_call_completed";
+      iteration: number;
+      index: number;
+      total: number;
+      toolName: string;
+      args: Record<string, unknown>;
+      result: unknown;
+      parseError?: string;
+    }
+  | {
+      type: "diagnostics";
+      iteration: number;
+      errors: number;
+      warnings: number;
+      info: number;
+    }
+  | { type: "assistant_message"; content: string }
+  | { type: "done"; payload: GenerateResult };
+
+export async function runCodegen(
+  input: GenerateInput,
+  onEvent?: (event: GenerateStreamEvent) => Promise<void> | void
+): Promise<GenerateResult> {
+  const {
+    prompt,
+    currentCode,
+    projectContext,
+    openRouterApiKey,
+    model,
+    maxIterations,
+  } = input;
+
+  const apiKey = openRouterApiKey || process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "OpenRouter API key is missing. Please configure it in Settings or on the server."
+    );
+  }
+
+  const tools = buildToolDefinitions();
+  const systemPrompt = buildSystemPrompt(currentCode, projectContext);
+
+  const messages: OpenRouterMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: prompt },
+  ];
+
+  const toolResults: ToolCallRecord[] = [];
+  let finalCode = currentCode || "";
+  let iterations = 0;
+
+  while (iterations < maxIterations) {
+    iterations++;
+    await onEvent?.({ type: "iteration_started", iteration: iterations });
+
+    const response = await callOpenRouter({
+      apiKey,
+      model,
+      messages,
+      tools,
+    });
+
+    const assistantMessage = response.choices[0]?.message;
+    if (!assistantMessage) break;
+
+    messages.push(assistantMessage);
+
+    if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+      if (assistantMessage.content) {
+        await onEvent?.({ type: "assistant_message", content: assistantMessage.content });
+      }
+      break;
+    }
+
+    const total = assistantMessage.tool_calls.length;
+    for (const [index, toolCall] of assistantMessage.tool_calls.entries()) {
+      let args: Record<string, unknown> = {};
+      let parseError: string | null = null;
+      try {
+        args = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
+      } catch (e: unknown) {
+        parseError = e instanceof Error ? e.message : String(e);
+        console.error(
+          "Failed to parse tool arguments:",
+          toolCall.function.arguments
+        );
+      }
+
+      await onEvent?.({
+        type: "tool_call_started",
+        iteration: iterations,
+        index: index + 1,
+        total,
+        toolName: toolCall.function.name,
+        args,
+      });
+
+      if (parseError) {
+        const parseErrorResult = {
+          error: `JSON parsing failed: ${parseError}. The arguments were: ${toolCall.function.arguments}. Please retry with valid JSON format for the ${toolCall.function.name} tool.`,
+        };
+
+        await onEvent?.({
+          type: "tool_call_completed",
+          iteration: iterations,
+          index: index + 1,
+          total,
+          toolName: toolCall.function.name,
+          args,
+          result: parseErrorResult,
+          parseError,
+        });
+
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(parseErrorResult),
+        });
+        continue;
+      }
+
+      const result = executeToolCall(toolCall.function.name, args, finalCode);
+
+      if (result.updatedCode !== undefined) {
+        finalCode = result.updatedCode;
+      }
+
+      let toolOutput = result.output;
+      if (
+        toolCall.function.name === "edit_code" ||
+        toolCall.function.name === "write_code"
+      ) {
+        const runtime = await runJscadRuntime(finalCode);
+        if (toolOutput && typeof toolOutput === "object") {
+          toolOutput = { ...toolOutput, runtime };
+        } else {
+          toolOutput = { result: toolOutput, runtime };
+        }
+        if (!runtime.ok && runtime.error) {
+          messages.push({
+            role: "system",
+            content: `JSCAD runtime error after ${toolCall.function.name}:\n${runtime.error}\nPlease fix this error.`,
+          });
+        }
+      }
+
+      toolResults.push({
+        toolName: toolCall.function.name,
+        args,
+        result: toolOutput,
+      });
+
+      await onEvent?.({
+        type: "tool_call_completed",
+        iteration: iterations,
+        index: index + 1,
+        total,
+        toolName: toolCall.function.name,
+        args,
+        result: toolOutput,
+      });
+
+      messages.push({
+        role: "tool",
+        tool_call_id: toolCall.id,
+        content: JSON.stringify(toolOutput),
+      });
+    }
+
+    const lastToolNames = (assistantMessage.tool_calls || []).map(
+      (tc: { function: { name: string } }) => tc.function.name
+    );
+    if (
+      lastToolNames.includes("edit_code") ||
+      lastToolNames.includes("write_code")
+    ) {
+      const diagnostics = runDiagnostics(finalCode);
+      await onEvent?.({
+        type: "diagnostics",
+        iteration: iterations,
+        errors: diagnostics.errors,
+        warnings: diagnostics.warnings,
+        info: diagnostics.info,
+      });
+      if (diagnostics.errors > 0) {
+        messages.push({
+          role: "system",
+          content: `Auto-diagnostics detected ${diagnostics.errors} error(s):\n${JSON.stringify(diagnostics.diagnostics, null, 2)}\nPlease fix these issues.`,
+        });
+      }
+    }
+  }
+
+  const payload: GenerateResult = {
+    code: finalCode,
+    toolResults,
+    iterations,
+    assistantMessage:
+      messages[messages.length - 1]?.role === "assistant"
+        ? (messages[messages.length - 1] as { content?: string })?.content
+        : undefined,
+  };
+
+  await onEvent?.({ type: "done", payload });
+  return payload;
 }
 
 interface ToolResult {
@@ -820,6 +911,48 @@ function executeToolCall(
 }
 
 // --- Diagnostics ---
+
+async function runJscadRuntime(
+  code: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const jscad = await import("@jscad/modeling");
+
+    const mockRequire = (path: string) => {
+      if (path === "@jscad/modeling") return jscad;
+      if (path.startsWith("@jscad/modeling/")) {
+        const subpath = path.replace("@jscad/modeling/", "");
+        const parts = subpath.split("/");
+        let result: unknown = jscad as Record<string, unknown>;
+        for (const part of parts) {
+          result = (result as Record<string, unknown>)?.[part];
+        }
+        return result;
+      }
+      throw new Error(`Unknown module: ${path}`);
+    };
+
+    const cjsModule = { exports: {} as Record<string, unknown> };
+    const fn = new Function("require", "module", "exports", code);
+    fn(mockRequire, cjsModule, cjsModule.exports);
+
+    const exports = cjsModule.exports as {
+      main?: (params?: Record<string, unknown>) => unknown;
+    };
+
+    if (typeof exports.main !== "function") {
+      return { ok: false, error: "No main() function exported" };
+    }
+
+    exports.main({});
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 function runDiagnostics(code: string): {
   diagnostics: DiagnosticItem[];
