@@ -12,11 +12,12 @@ import {
   AlertCircle,
   MessageSquare,
   CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 import { getOpenRouterSettings } from "@/lib/openrouter";
 import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
+import { Id } from "@/convex/_generated/dataModel";
 
 interface ChatMessage {
   id: string;
@@ -75,14 +76,57 @@ type StreamEvent =
 
 interface ChatPanelProps {
   projectId: string;
+  projectName?: string;
   currentCode: string;
   onCodeChange: (code: string) => void;
   onPromptComplete?: () => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
+const defaultProjectNames = new Set([
+  "untitled project",
+  "new project from template",
+]);
+
+function deriveProjectName(prompt: string) {
+  const cleaned = prompt
+    .replace(/[`*_#>~\[\]{}()<>]/g, " ")
+    .replace(/[^\w\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const words = cleaned.split(" ").filter(Boolean).slice(0, 6);
+  if (words.length === 0) return "";
+
+  const title = words
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+
+  return title.slice(0, 60).trim();
+}
+
+async function requestProjectTitle(prompt: string, apiKey: string) {
+  try {
+    const response = await fetch("/api/project-title", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, apiKey }),
+    });
+
+    if (!response.ok) {
+      return "";
+    }
+
+    const data = (await response.json()) as { title?: string };
+    return typeof data.title === "string" ? data.title : "";
+  } catch {
+    return "";
+  }
+}
+
 export function ChatPanel({
   projectId,
+  projectName,
   currentCode,
   onCodeChange,
   onPromptComplete,
@@ -102,6 +146,7 @@ export function ChatPanel({
   // Convex hooks for chat persistence
   const convexMessages = useQuery(api.chat.list, { projectId: projectId as Id<"projects"> });
   const sendMessage = useMutation(api.chat.send);
+  const updateProject = useMutation(api.projects.update);
 
   // Load messages from Convex when they change
   useEffect(() => {
@@ -337,6 +382,35 @@ export function ChatPanel({
     const prompt = input.trim();
     setInput("");
 
+    const hasUserMessages = messages.some((msg) => msg.role === "user");
+    const canAutoName = projectName
+      ? defaultProjectNames.has(projectName.trim().toLowerCase())
+      : false;
+    if (!hasUserMessages && canAutoName) {
+      let derivedName = deriveProjectName(prompt);
+      const settings = getOpenRouterSettings();
+      if (settings.apiKey) {
+        const suggestedName = await requestProjectTitle(prompt, settings.apiKey);
+        if (suggestedName) {
+          derivedName = suggestedName;
+        }
+      }
+      if (
+        derivedName &&
+        projectName &&
+        derivedName.toLowerCase() !== projectName.trim().toLowerCase()
+      ) {
+        try {
+          await updateProject({
+            id: projectId as Id<"projects">,
+            name: derivedName,
+          });
+        } catch (error) {
+          console.warn("Failed to auto-rename project:", error);
+        }
+      }
+    }
+
     // Add user message
     await onAddMessage({
       role: "user",
@@ -345,6 +419,15 @@ export function ChatPanel({
 
     await generateResponse(prompt);
   };
+
+  const handleRetry = useCallback(async (prompt: string) => {
+    if (!prompt.trim() || isGenerating) return;
+    await onAddMessage({
+      role: "user",
+      content: prompt,
+    });
+    await generateResponse(prompt);
+  }, [generateResponse, isGenerating, onAddMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -363,10 +446,13 @@ export function ChatPanel({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-        {messages.map((msg) => (
+        {messages.map((msg, index) => (
           <MessageBubble
             key={msg.id}
             message={msg}
+            retryPrompt={getRetryPrompt(messages, index)}
+            onRetry={handleRetry}
+            isGenerating={isGenerating}
           />
         ))}
 
@@ -405,14 +491,14 @@ export function ChatPanel({
         onSubmit={handleSubmit}
         className="border-t border-zinc-800 p-3"
       >
-        <div className="relative">
+        <div className="relative h-full">
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Describe what you want to build..."
-            className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 pr-12 text-sm text-zinc-200 placeholder:text-zinc-600 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="h-full w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 pr-12 text-sm text-zinc-200 placeholder:text-zinc-600 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
             rows={3}
             disabled={isGenerating}
           />
@@ -435,8 +521,14 @@ export function ChatPanel({
 
 function MessageBubble({
   message,
+  retryPrompt,
+  onRetry,
+  isGenerating,
 }: {
   message: ChatMessage;
+  retryPrompt?: string;
+  onRetry?: (prompt: string) => void;
+  isGenerating?: boolean;
 }) {
   const roleConfig = {
     user: {
@@ -473,29 +565,58 @@ function MessageBubble({
   const Icon = config.icon;
 
   return (
-    <div
-      className={`rounded-lg border p-3 ${config.bgColor} ${config.borderColor}`}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        <Icon className="w-3.5 h-3.5 text-zinc-500" />
-        <span className="text-xs font-medium text-zinc-500">
-          {config.label}
-        </span>
-      </div>
+    <div>
       <div
-        className={`text-sm ${config.textColor} prose prose-sm prose-invert max-w-none break-words [&>p]:mb-2 [&>p:last-child]:mb-0 [&>pre]:bg-black/50 [&>pre]:p-2 [&>pre]:rounded-md`}
+        className={`rounded-lg border p-3 ${config.bgColor} ${config.borderColor}`}
       >
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {message.content}
-        </ReactMarkdown>
-      </div>
+        <div className="flex items-center gap-2 mb-1">
+          <Icon className="w-3.5 h-3.5 text-zinc-500" />
+          <span className="text-xs font-medium text-zinc-500">
+            {config.label}
+          </span>
+        </div>
+        <div
+          className={`text-sm ${config.textColor} prose prose-sm prose-invert max-w-none break-words [&>p]:mb-2 [&>p:last-child]:mb-0 [&>pre]:bg-black/50 [&>pre]:p-2 [&>pre]:rounded-md`}
+        >
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {message.content}
+          </ReactMarkdown>
+        </div>
 
-      {/* Tool calls expansion */}
-      {message.toolCalls && message.toolCalls.length > 0 && (
-        <ToolCallsDisplay toolCalls={message.toolCalls} />
+        {/* Tool calls expansion */}
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <ToolCallsDisplay toolCalls={message.toolCalls} />
+        )}
+      </div>
+      {message.role === "user" && retryPrompt && onRetry && (
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={() => onRetry(retryPrompt)}
+            disabled={isGenerating}
+            className="text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Retry this prompt"
+            type="button"
+          >
+            <RefreshCw className="w-3 h-3" />
+          </button>
+        </div>
       )}
     </div>
   );
+}
+
+function getRetryPrompt(messages: ChatMessage[], index: number) {
+  const current = messages[index];
+  if (current?.role === "user") {
+    return current.content;
+  }
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role === "user") {
+      return message.content;
+    }
+  }
+  return "";
 }
 
 function ToolCallsDisplay({

@@ -98,7 +98,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       
       const defaults: ParameterValues = {};
       defs.forEach((def) => {
-        defaults[def.name] = def.initial as number | boolean | string;
+        defaults[def.name] = (def.initial ?? def.value) as number | boolean | string;
       });
       setParameters((prev) => ({ ...defaults, ...prev }));
     }
@@ -546,6 +546,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
           <div className="w-80 border-r border-border flex flex-col bg-card">
             <ChatPanel
               projectId={projectId}
+              projectName={project?.name}
               currentCode={code}
               onCodeChange={handleCodeChange}
               onPromptComplete={handlePromptComplete}
