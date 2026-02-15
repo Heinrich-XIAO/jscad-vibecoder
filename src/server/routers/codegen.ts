@@ -87,6 +87,7 @@ export type GenerateStreamEvent =
       warnings: number;
       info: number;
     }
+  | { type: "assistant_message_delta"; delta: string }
   | { type: "assistant_message"; content: string }
   | { type: "done"; payload: GenerateResult };
 
@@ -284,56 +285,60 @@ export async function runCodegen(
     assistantMessage: undefined,
   };
 
+  const streamFinalAssistant = async (messagesForFinal: OpenRouterMessage[]) => {
+    let streamedText = "";
+    streamedText = await callOpenRouterStream(
+      {
+        apiKey,
+        model,
+        messages: messagesForFinal,
+        tools,
+        toolChoice: "none",
+      },
+      async (delta) => {
+        await onEvent?.({ type: "assistant_message_delta", delta });
+      }
+    );
+
+    if (streamedText) {
+      await onEvent?.({ type: "assistant_message", content: streamedText });
+    }
+
+    return streamedText;
+  };
+
   let finalAssistantContent =
     messages[messages.length - 1]?.role === "assistant"
       ? (messages[messages.length - 1] as { content?: string })?.content
       : undefined;
 
   if (!finalAssistantContent) {
-    const finalResponse = await callOpenRouter({
-      apiKey,
-      model,
-      messages: [
-        ...messages,
-        {
-          role: "system",
-          content:
-            "Provide a final response to the user. Do not call tools. Summarize what you did and what happened.",
-        },
-      ],
-      tools,
-      toolChoice: "none",
-    });
-
-    const finalMessage = finalResponse.choices[0]?.message;
-    if (finalMessage?.content) {
-      finalAssistantContent = finalMessage.content;
-      messages.push({ role: "assistant", content: finalMessage.content });
-      await onEvent?.({ type: "assistant_message", content: finalMessage.content });
+    const streamed = await streamFinalAssistant([
+      ...messages,
+      {
+        role: "system",
+        content:
+          "Provide a final response to the user. Do not call tools. Summarize what you did and what happened.",
+      },
+    ]);
+    if (streamed) {
+      finalAssistantContent = streamed;
+      messages.push({ role: "assistant", content: streamed });
     }
   }
 
   if (!finalAssistantContent) {
-    const forcedResponse = await callOpenRouter({
-      apiKey,
-      model,
-      messages: [
-        ...messages,
-        {
-          role: "system",
-          content:
-            "You did not provide a final response. Respond now with a concise user-facing message. Do not call tools.",
-        },
-      ],
-      tools,
-      toolChoice: "none",
-    });
-
-    const forcedMessage = forcedResponse.choices[0]?.message;
-    if (forcedMessage?.content) {
-      finalAssistantContent = forcedMessage.content;
-      messages.push({ role: "assistant", content: forcedMessage.content });
-      await onEvent?.({ type: "assistant_message", content: forcedMessage.content });
+    const streamed = await streamFinalAssistant([
+      ...messages,
+      {
+        role: "system",
+        content:
+          "You did not provide a final response. Respond now with a concise user-facing message. Do not call tools.",
+      },
+    ]);
+    if (streamed) {
+      finalAssistantContent = streamed;
+      messages.push({ role: "assistant", content: streamed });
     }
   }
 
@@ -398,6 +403,101 @@ async function callOpenRouter(params: {
   }
 
   return response.json();
+}
+
+async function callOpenRouterStream(
+  params: {
+    apiKey: string;
+    model: string;
+    messages: OpenRouterMessage[];
+    tools: unknown[];
+    toolChoice?: "auto" | "none";
+  },
+  onDelta: (delta: string) => Promise<void> | void
+) {
+  const response = await fetch(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${params.apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://jscad-vibe.app",
+        "X-Title": "JSCAD Vibe",
+      },
+      body: JSON.stringify({
+        model: params.model,
+        messages: params.messages,
+        tools: params.tools,
+        tool_choice: params.toolChoice ?? "auto",
+        temperature: 0.3,
+        max_tokens: 4096,
+        stream: true,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
+  }
+
+  if (!response.body) {
+    throw new Error("OpenRouter streaming response body is empty.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullText = "";
+  let doneStreaming = false;
+
+  const handleEvent = async (eventBlock: string) => {
+    const dataLines = eventBlock
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trim());
+
+    if (dataLines.length === 0) return;
+    const data = dataLines.join("\n");
+
+    if (data === "[DONE]") {
+      doneStreaming = true;
+      return;
+    }
+
+    const parsed = JSON.parse(data) as {
+      choices?: Array<{
+        delta?: { content?: string };
+      }>;
+    };
+
+    const delta = parsed.choices?.[0]?.delta?.content;
+    if (delta) {
+      fullText += delta;
+      await onDelta(delta);
+    }
+  };
+
+  while (!doneStreaming) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+
+    for (const eventBlock of events) {
+      await handleEvent(eventBlock);
+      if (doneStreaming) break;
+    }
+  }
+
+  if (buffer && !doneStreaming) {
+    await handleEvent(buffer);
+  }
+
+  return fullText;
 }
 
 // --- Tool Definitions (OpenAI function calling format) ---
@@ -754,7 +854,33 @@ const main = () => { return cuboid({ size: [10, 10, 10] }) }
 module.exports = { main }
 \`\`\`
 
+Good write_code output (non-parametric):
+\`\`\`js
+const { cuboid } = require('@jscad/modeling').primitives
+function main() {
+  return cuboid({ size: [20, 20, 10] })
+}
+module.exports = { main }
+\`\`\`
+
 For parametric models, you MUST export \`getParameterDefinitions\` and define \`main(params)\` that uses those params. The UI only shows sliders when \`getParameterDefinitions\` exists, and parameter values only take effect when \`main\` reads the params.
+
+Good write_code output (parametric):
+\`\`\`js
+const { cuboid } = require('@jscad/modeling').primitives
+function getParameterDefinitions() {
+  return [
+    { name: 'width', type: 'float', initial: 20, caption: 'Width' },
+    { name: 'depth', type: 'float', initial: 20, caption: 'Depth' },
+    { name: 'height', type: 'float', initial: 10, caption: 'Height' },
+  ]
+}
+function main(params) {
+  const { width = 20, depth = 20, height = 10 } = params || {}
+  return cuboid({ size: [width, depth, height] })
+}
+module.exports = { main, getParameterDefinitions }
+\`\`\`
 
 Parametric examples (correct):
 \`\`\`js
@@ -829,6 +955,19 @@ module.exports = { main, getParameterDefinitions }
   - /jscad-libs/electronics/lasermodule/tocan.jscad
   - /jscad-libs/electronics/ultrasonicsensors/hcsr04.jscad
 - Prefer JSCAD v2-compatible libraries; avoid legacy v1-only CSG libraries unless the user asks for them.
+
+## Preferred Library Usage
+- Gears: use the provided library instead of hand-built teeth.
+  - include('/jscad-libs/mechanics/gears.jscad') (loads v1 compat automatically).
+  - Create gears with window.jscad.tspi.involuteGear(printerSettings, params).
+  - Return gear.getModel() from main.
+  - Minimal example (use param defaults and define params via getParameterDefinitions):
+    include('/jscad-libs/mechanics/gears.jscad')
+    function main(params) {
+      const printerSettings = { scale: 1, correctionInsideDiameter: 0, correctionOutsideDiameter: 0, correctionInsideDiameterMoving: 0, correctionOutsideDiameterMoving: 0, resolutionCircle: 360 }
+      const gear = new window.jscad.tspi.involuteGear(printerSettings, { module: 2, teethNumber: 20, thickness: 6, centerholeRadius: 5 })
+      return gear.getModel()
+    }
 
 ## Tool Enforcement (Critical)
 - If the user requests a model, code, or modification, you MUST call the appropriate tool (write_code or edit_code).
@@ -1181,14 +1320,14 @@ async function runJscadRuntime(
     const remoteModuleCache = new Map<string, { exports: Record<string, unknown> }>();
     const evaluating = new Set<string>();
     const runtimeGlobal = globalThis as unknown as Record<string, unknown>;
-    if (!("window" in runtimeGlobal)) {
-      runtimeGlobal.window = runtimeGlobal;
-    }
-    if (!runtimeGlobal.window || typeof runtimeGlobal.window !== "object") {
-      runtimeGlobal.window = {};
-    }
-    if (!("location" in runtimeGlobal.window)) {
-      runtimeGlobal.window.location = { protocol: "https:", origin: "https://localhost" };
+    const existingWindow = runtimeGlobal.window;
+    const runtimeWindow =
+      existingWindow && typeof existingWindow === "object"
+        ? (existingWindow as Record<string, unknown>)
+        : {};
+    runtimeGlobal.window = runtimeWindow;
+    if (!("location" in runtimeWindow)) {
+      runtimeWindow.location = { protocol: "https:", origin: "https://localhost" };
     }
 
     const evaluateRemoteModule = (
