@@ -11,8 +11,8 @@ import {
   Wrench,
   AlertCircle,
   MessageSquare,
+  CheckCircle2,
 } from "lucide-react";
-import { trpc } from "@/lib/trpc-provider";
 import { getOpenRouterSettings } from "@/lib/openrouter";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
@@ -28,6 +28,50 @@ interface ChatMessage {
     result: unknown;
   }>;
 }
+
+interface LiveToolCall {
+  id: string;
+  iteration: number;
+  index: number;
+  total: number;
+  toolName: string;
+  args: Record<string, unknown>;
+  status: "running" | "completed";
+  result?: unknown;
+}
+
+type StreamEvent =
+  | { type: "iteration_started"; iteration: number }
+  | {
+      type: "tool_call_started";
+      iteration: number;
+      index: number;
+      total: number;
+      toolName: string;
+      args: Record<string, unknown>;
+    }
+  | {
+      type: "tool_call_completed";
+      iteration: number;
+      index: number;
+      total: number;
+      toolName: string;
+      args: Record<string, unknown>;
+      result: unknown;
+      parseError?: string;
+    }
+  | { type: "diagnostics"; iteration: number; errors: number; warnings: number; info: number }
+  | { type: "assistant_message"; content: string }
+  | {
+      type: "done";
+      payload: {
+        code: string;
+        toolResults: Array<{ toolName: string; args: Record<string, unknown>; result: unknown }>;
+        iterations: number;
+        assistantMessage?: string;
+      };
+    }
+  | { type: "error"; message: string };
 
 interface ChatPanelProps {
   projectId: string;
@@ -47,6 +91,8 @@ export function ChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [liveToolCalls, setLiveToolCalls] = useState<LiveToolCall[]>([]);
+  const [streamStatus, setStreamStatus] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const internalInputRef = useRef<HTMLTextAreaElement>(null);
   
@@ -56,8 +102,6 @@ export function ChatPanel({
   // Convex hooks for chat persistence
   const convexMessages = useQuery(api.chat.list, { projectId: projectId as Id<"projects"> });
   const sendMessage = useMutation(api.chat.send);
-
-  const generateMutation = trpc.codegen.generate.useMutation();
 
   // Load messages from Convex when they change
   useEffect(() => {
@@ -106,48 +150,185 @@ export function ChatPanel({
 
   const generateResponse = useCallback(async (prompt: string) => {
     setIsGenerating(true);
+    setLiveToolCalls([]);
+    setStreamStatus("Starting agent...");
+
     try {
       const settings = getOpenRouterSettings();
 
-      const result = await generateMutation.mutateAsync({
-        prompt,
-        currentCode,
-        openRouterApiKey: settings.apiKey,
-        model: settings.model,
-        maxIterations: 5,
+      const response = await fetch("/api/codegen/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          currentCode,
+          openRouterApiKey: settings.apiKey,
+          model: settings.model,
+          maxIterations: 5,
+        }),
       });
 
-      // Add tool call results
-      if (result.toolResults.length > 0) {
-        onAddMessage({
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Streaming failed (${response.status})`);
+      }
+
+      if (!response.body) {
+        throw new Error("Streaming response body is empty.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalPayload:
+        | {
+            code: string;
+            toolResults: Array<{ toolName: string; args: Record<string, unknown>; result: unknown }>;
+            iterations: number;
+            assistantMessage?: string;
+          }
+        | null = null;
+      let latestAssistantMessage: string | undefined;
+
+      const upsertLiveToolCall = (
+        call: Omit<LiveToolCall, "status"> & { status: "running" | "completed"; result?: unknown }
+      ) => {
+        setLiveToolCalls((prev) => {
+          const idx = prev.findIndex((x) => x.id === call.id);
+          if (idx === -1) {
+            return [...prev, call];
+          }
+          const next = [...prev];
+          next[idx] = { ...next[idx], ...call };
+          return next;
+        });
+      };
+
+      const handleEvent = (event: StreamEvent) => {
+        if (event.type === "iteration_started") {
+          setStreamStatus(`Iteration ${event.iteration}...`);
+          return;
+        }
+
+        if (event.type === "tool_call_started") {
+          const id = `${event.iteration}-${event.index}-${event.toolName}`;
+          setStreamStatus(
+            `Running tool ${event.index}/${event.total}: ${event.toolName}`
+          );
+          upsertLiveToolCall({
+            id,
+            iteration: event.iteration,
+            index: event.index,
+            total: event.total,
+            toolName: event.toolName,
+            args: event.args,
+            status: "running",
+          });
+          return;
+        }
+
+        if (event.type === "tool_call_completed") {
+          const id = `${event.iteration}-${event.index}-${event.toolName}`;
+          upsertLiveToolCall({
+            id,
+            iteration: event.iteration,
+            index: event.index,
+            total: event.total,
+            toolName: event.toolName,
+            args: event.args,
+            status: "completed",
+            result: event.result,
+          });
+          setStreamStatus(`Finished ${event.toolName}`);
+          return;
+        }
+
+        if (event.type === "diagnostics") {
+          setStreamStatus(
+            `Diagnostics: ${event.errors} errors, ${event.warnings} warnings`
+          );
+          return;
+        }
+
+        if (event.type === "assistant_message") {
+          latestAssistantMessage = event.content;
+          setStreamStatus("Finalizing response...");
+          return;
+        }
+
+        if (event.type === "done") {
+          finalPayload = event.payload;
+          return;
+        }
+
+        if (event.type === "error") {
+          throw new Error(event.message);
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const eventBlock of events) {
+          const dataLines = eventBlock
+            .split("\n")
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trim());
+
+          if (dataLines.length === 0) continue;
+
+          const data = dataLines.join("\n");
+          const parsed = JSON.parse(data) as StreamEvent;
+          handleEvent(parsed);
+        }
+      }
+
+      if (!finalPayload) {
+        throw new Error("Stream ended before completion payload.");
+      }
+
+      const donePayload = finalPayload as {
+        code: string;
+        toolResults: Array<{ toolName: string; args: Record<string, unknown>; result: unknown }>;
+        iterations: number;
+        assistantMessage?: string;
+      };
+
+      if (donePayload.toolResults.length > 0) {
+        await onAddMessage({
           role: "tool",
-          content: `Executed ${result.toolResults.length} tool call(s) in ${result.iterations} iteration(s).`,
-          toolCalls: result.toolResults,
+          content: `Executed ${donePayload.toolResults.length} tool call(s) in ${donePayload.iterations} iteration(s).`,
+          toolCalls: donePayload.toolResults,
         });
       }
 
-      // Add assistant message
-      if (result.assistantMessage) {
-        onAddMessage({
+      const assistant = donePayload.assistantMessage || latestAssistantMessage;
+      if (assistant) {
+        await onAddMessage({
           role: "assistant",
-          content: result.assistantMessage,
+          content: assistant,
         });
       }
 
-      // Update code
-      if (result.code && result.code !== currentCode) {
-        onCodeUpdate(result.code);
+      if (donePayload.code && donePayload.code !== currentCode) {
+        onCodeUpdate(donePayload.code);
       }
     } catch (error) {
-      onAddMessage({
+      await onAddMessage({
         role: "system",
         content: `Error: ${error instanceof Error ? error.message : "Failed to generate code"}`,
       });
     } finally {
+      setStreamStatus("");
       setIsGenerating(false);
       onPromptComplete?.();
     }
-  }, [currentCode, generateMutation, onAddMessage, onCodeUpdate, onPromptComplete]);
+  }, [currentCode, onAddMessage, onCodeUpdate, onPromptComplete]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,9 +371,29 @@ export function ChatPanel({
         ))}
 
         {isGenerating && (
-          <div className="flex items-center gap-2 text-zinc-500 text-sm">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>Generating...</span>
+          <div className="rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-emerald-300 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>{streamStatus || "Running tools..."}</span>
+            </div>
+            {liveToolCalls.length > 0 && (
+              <div className="space-y-1">
+                {liveToolCalls.map((call) => (
+                  <div
+                    key={call.id}
+                    className="text-xs rounded bg-zinc-900/70 border border-zinc-800 px-2 py-1 text-zinc-300 flex items-center gap-2"
+                  >
+                    {call.status === "running" ? (
+                      <Loader2 className="w-3 h-3 animate-spin text-emerald-400" />
+                    ) : (
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    )}
+                    <span className="font-mono">{call.toolName}</span>
+                    <span className="text-zinc-500">({call.index}/{call.total})</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -306,7 +507,7 @@ function ToolCallsDisplay({
     result: unknown;
   }>;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   return (
     <div className="mt-2">
@@ -321,13 +522,13 @@ function ToolCallsDisplay({
       {expanded && (
         <div className="mt-2 space-y-2">
           {toolCalls.map((tc, i) => (
-            <div
-              key={i}
-              className="bg-zinc-900 rounded p-2 text-xs font-mono"
-            >
+            <div key={i} className="bg-zinc-900 rounded p-2 text-xs font-mono">
               <div className="text-emerald-400 mb-1">{tc.toolName}</div>
               <div className="text-zinc-500">
                 {JSON.stringify(tc.args, null, 2).substring(0, 200)}
+              </div>
+              <div className="text-zinc-400 mt-1">
+                {JSON.stringify(tc.result, null, 2).substring(0, 200)}
               </div>
             </div>
           ))}
