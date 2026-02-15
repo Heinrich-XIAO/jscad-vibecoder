@@ -84,3 +84,23 @@ export const updateMetadata = mutation({
     await ctx.db.patch(id, filtered);
   },
 });
+
+export const saveDraft = mutation({
+  args: {
+    id: v.id("versions"),
+    jscadCode: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const version = await ctx.db.get(args.id);
+    if (!version) {
+      throw new Error("Version not found");
+    }
+
+    if (version.jscadCode === args.jscadCode) {
+      return args.id;
+    }
+
+    await ctx.db.patch(args.id, { jscadCode: args.jscadCode });
+    return args.id;
+  },
+});
