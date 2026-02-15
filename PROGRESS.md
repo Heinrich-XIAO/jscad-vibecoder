@@ -1,11 +1,11 @@
 # JSCAD Vibecoder - Development Progress
 
 **Last Updated:** 2026-02-14  
-**Current Status:** 90% Complete - Production Ready 🚀
+**Current Status:** 91% Complete - Production Ready 🚀
 
 ---
 
-## ✅ Completed Features (18/20)
+## ✅ Completed Features (20/22)
 
 ### Critical Fixes & Infrastructure
 - ✅ **All Lint Errors Fixed** - Clean codebase with no TypeScript/React warnings
@@ -13,6 +13,8 @@
 - ✅ **Convex Configuration** - Backend schema and functions ready
 - ✅ **Environment Setup** - .env.local template with proper documentation
 - ✅ **Error Boundaries** - Graceful error handling with user-friendly crash pages
+- ✅ **3D Viewer Scroll Lock** - Wheel zoom no longer scrolls the page
+- ✅ **Full-Height Layout** - Page and side panels reach the bottom edge
 - ✅ **Dashboard Date/Time Fallback** - Project cards now display a timestamp and use Convex `_creationTime` when `updatedAt` is missing
 - ✅ **Theme Context Stability** - `ThemeProvider` now always provides context during initial mount, preventing `useTheme` runtime crashes
 
@@ -39,6 +41,7 @@
 - ✅ **Dark/Light Theme Toggle** - System preference detection, 3 modes (light/dark/system)
 - ✅ **Undo/Redo** - Full code history tracking (50 states max) with UI buttons
 - ✅ **Draft Autosave (No New Version)** - Auto-saves edited code to current version after run (5s delay) and when AI prompt completes
+- ✅ **Streaming Tool Feedback** - Chat shows live tool execution status and results during AI runs
 
 ### AI Features
 - ✅ **14 AI Tools** - Full tool system implemented:
@@ -56,10 +59,11 @@
   - `diff_versions` - Version comparison
   - `split_components` - Component management
   - `render_preview` - Preview generation
+- ✅ **Runtime JSCAD Check After AI Edits** - Auto-runs JSCAD after edit/write tool calls and reports errors
 
 ---
 
-## 🚧 Remaining Features (2/20)
+## 🚧 Remaining Features (2/22)
 
 ### Medium Priority
 1. **README Documentation** - Comprehensive user and developer docs
@@ -131,9 +135,10 @@ bun run dev
 | Core Fixes | 5 | 5 | 100% ✅ |
 | 3D Modeling | 4 | 5 | 80% |
 | AI Tools | 14 | 14 | 100% ✅ |
-| UX Features | 7 | 7 | 100% ✅ |
+| AI Runtime Checks | 1 | 1 | 100% ✅ |
+| UX Features | 8 | 8 | 100% ✅ |
 | Infrastructure | 2 | 3 | 67% |
-| **TOTAL** | **18** | **20** | **90%** |
+| **TOTAL** | **20** | **22** | **91%** |
 
 ---
 

@@ -14,3 +14,6 @@
 * Understand the current tech stack and architecture
 * Review known issues and next steps
 * Update PROGRESS.md when completing features
+
+## Mistake Log
+* If you make a mistake that costs a significant amount of time, write it down in this file for future agents.
