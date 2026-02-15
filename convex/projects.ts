@@ -75,14 +75,6 @@ module.exports = { main }
 
     await ctx.db.patch(projectId, { currentVersionId: versionId });
 
-    // Create initial system message
-    await ctx.db.insert("chatMessages", {
-      projectId,
-      role: "system",
-      content:
-        "Project created. Describe what you want to build and I'll generate JSCAD code for you.",
-    });
-
     return projectId;
   },
 });
