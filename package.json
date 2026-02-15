@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "tsslint --project tsconfig.json"
   },
   "dependencies": {
     "@jscad/io-utils": "^2.0.32",
@@ -33,11 +33,11 @@
   "devDependencies": {
     "@jscad/regl-renderer": "^2.6.14",
     "@tailwindcss/postcss": "^4",
+    "@tsslint/cli": "^3.0.2",
+    "@tsslint/config": "^3.0.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
