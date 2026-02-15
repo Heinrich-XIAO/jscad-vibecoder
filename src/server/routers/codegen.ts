@@ -47,6 +47,17 @@ interface OpenRouterMessage {
   tool_call_id?: string;
 }
 
+function parseModelSpec(model: string) {
+  const match = model.match(/\|reasoning=(low|high)$/);
+  if (!match) {
+    return { model, reasoning: undefined } as const;
+  }
+
+  const effort = match[1] as "low" | "high";
+  const baseModel = model.replace(/\|reasoning=(low|high)$/, "");
+  return { model: baseModel, reasoning: { effort } } as const;
+}
+
 interface ToolCallRecord {
   toolName: string;
   args: Record<string, unknown>;
@@ -111,6 +122,8 @@ export async function runCodegen(
     );
   }
 
+  const { model: resolvedModel, reasoning } = parseModelSpec(model);
+
   const tools = buildToolDefinitions();
   const systemPrompt = buildSystemPrompt(currentCode, projectContext);
 
@@ -131,9 +144,10 @@ export async function runCodegen(
 
     const response = await callOpenRouter({
       apiKey,
-      model,
+      model: resolvedModel,
       messages,
       tools,
+      reasoning,
     });
 
     const assistantMessage = response.choices[0]?.message;
@@ -290,10 +304,11 @@ export async function runCodegen(
     streamedText = await callOpenRouterStream(
       {
         apiKey,
-        model,
+        model: resolvedModel,
         messages: messagesForFinal,
         tools,
         toolChoice: "none",
+        reasoning,
       },
       async (delta) => {
         await onEvent?.({ type: "assistant_message_delta", delta });
@@ -375,6 +390,7 @@ async function callOpenRouter(params: {
   messages: OpenRouterMessage[];
   tools: unknown[];
   toolChoice?: "auto" | "none";
+  reasoning?: { effort: "low" | "high" };
 }) {
   const response = await fetch(
     "https://openrouter.ai/api/v1/chat/completions",
@@ -392,6 +408,7 @@ async function callOpenRouter(params: {
         tools: params.tools,
         tool_choice: params.toolChoice ?? "auto",
         provider: { sort: "price" },
+        ...(params.reasoning ? { reasoning: params.reasoning } : {}),
         temperature: 0.3,
         max_tokens: 4096,
       }),
@@ -413,6 +430,7 @@ async function callOpenRouterStream(
     messages: OpenRouterMessage[];
     tools: unknown[];
     toolChoice?: "auto" | "none";
+    reasoning?: { effort: "low" | "high" };
   },
   onDelta: (delta: string) => Promise<void> | void
 ) {
@@ -432,6 +450,7 @@ async function callOpenRouterStream(
         tools: params.tools,
         tool_choice: params.toolChoice ?? "auto",
         provider: { sort: "price" },
+        ...(params.reasoning ? { reasoning: params.reasoning } : {}),
         temperature: 0.3,
         max_tokens: 4096,
         stream: true,
