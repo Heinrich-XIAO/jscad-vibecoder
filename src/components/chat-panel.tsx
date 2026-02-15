@@ -62,6 +62,7 @@ type StreamEvent =
       parseError?: string;
     }
   | { type: "diagnostics"; iteration: number; errors: number; warnings: number; info: number }
+  | { type: "assistant_message_delta"; delta: string }
   | { type: "assistant_message"; content: string }
   | {
       type: "done";
@@ -137,6 +138,7 @@ export function ChatPanel({
   const [isGenerating, setIsGenerating] = useState(false);
   const [liveToolCalls, setLiveToolCalls] = useState<LiveToolCall[]>([]);
   const [streamStatus, setStreamStatus] = useState<string>("");
+  const [liveAssistantMessage, setLiveAssistantMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const internalInputRef = useRef<HTMLTextAreaElement>(null);
   
@@ -196,6 +198,7 @@ export function ChatPanel({
   const generateResponse = useCallback(async (prompt: string) => {
     setIsGenerating(true);
     setLiveToolCalls([]);
+    setLiveAssistantMessage("");
     setStreamStatus("Starting agent...");
 
     try {
@@ -297,7 +300,14 @@ export function ChatPanel({
 
         if (event.type === "assistant_message") {
           latestAssistantMessage = event.content;
+          setLiveAssistantMessage(event.content);
           setStreamStatus("Finalizing response...");
+          return;
+        }
+
+        if (event.type === "assistant_message_delta") {
+          setLiveAssistantMessage((prev) => prev + event.delta);
+          setStreamStatus("Streaming response...");
           return;
         }
 
@@ -347,7 +357,7 @@ export function ChatPanel({
       if (donePayload.toolResults.length > 0) {
         await onAddMessage({
           role: "tool",
-          content: `Executed ${donePayload.toolResults.length} tool call(s) in ${donePayload.iterations} iteration(s).`,
+          content: `Tool calls (${donePayload.toolResults.length})`,
           toolCalls: donePayload.toolResults,
         });
       }
@@ -371,6 +381,7 @@ export function ChatPanel({
     } finally {
       setStreamStatus("");
       setIsGenerating(false);
+      setLiveAssistantMessage("");
       onPromptComplete?.();
     }
   }, [currentCode, onAddMessage, onCodeUpdate, onPromptComplete]);
@@ -462,6 +473,13 @@ export function ChatPanel({
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>{streamStatus || "Running tools..."}</span>
             </div>
+            {liveAssistantMessage && (
+              <div className="rounded-md border border-emerald-900/40 bg-zinc-950/40 p-2 text-sm text-emerald-100/90 prose prose-sm prose-invert max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {liveAssistantMessage}
+                </ReactMarkdown>
+              </div>
+            )}
             {liveToolCalls.length > 0 && (
               <div className="space-y-1">
                 {liveToolCalls.map((call) => (
@@ -628,7 +646,7 @@ function ToolCallsDisplay({
     result: unknown;
   }>;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <div className="mt-2">
