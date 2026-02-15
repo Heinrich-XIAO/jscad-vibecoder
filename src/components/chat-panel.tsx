@@ -11,7 +11,6 @@ import {
   Wrench,
   AlertCircle,
   MessageSquare,
-  RefreshCw,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc-provider";
 import { getOpenRouterSettings } from "@/lib/openrouter";
@@ -34,6 +33,7 @@ interface ChatPanelProps {
   projectId: string;
   currentCode: string;
   onCodeChange: (code: string) => void;
+  onPromptComplete?: () => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
@@ -41,6 +41,7 @@ export function ChatPanel({
   projectId,
   currentCode,
   onCodeChange,
+  onPromptComplete,
   inputRef: externalInputRef,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -144,8 +145,9 @@ export function ChatPanel({
       });
     } finally {
       setIsGenerating(false);
+      onPromptComplete?.();
     }
-  }, [currentCode, generateMutation, onAddMessage, onCodeUpdate]);
+  }, [currentCode, generateMutation, onAddMessage, onCodeUpdate, onPromptComplete]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,14 +164,6 @@ export function ChatPanel({
 
     await generateResponse(prompt);
   };
-
-  const handleRetry = useCallback(async () => {
-    if (isGenerating) return;
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-    if (lastUserMsg) {
-      await generateResponse(lastUserMsg.content);
-    }
-  }, [isGenerating, messages, generateResponse]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -188,12 +182,10 @@ export function ChatPanel({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-        {messages.map((msg, i) => (
+        {messages.map((msg) => (
           <MessageBubble
             key={msg.id}
             message={msg}
-            isLast={i === messages.length - 1}
-            onRetry={handleRetry}
           />
         ))}
 
@@ -242,12 +234,8 @@ export function ChatPanel({
 
 function MessageBubble({
   message,
-  isLast,
-  onRetry,
 }: {
   message: ChatMessage;
-  isLast?: boolean;
-  onRetry?: () => void;
 }) {
   const roleConfig = {
     user: {
@@ -300,16 +288,6 @@ function MessageBubble({
           {message.content}
         </ReactMarkdown>
       </div>
-
-      {message.role === "assistant" && isLast && onRetry && (
-        <button
-          onClick={onRetry}
-          className="mt-2 flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors"
-        >
-          <RefreshCw className="w-3 h-3" />
-          Retry
-        </button>
-      )}
 
       {/* Tool calls expansion */}
       {message.toolCalls && message.toolCalls.length > 0 && (

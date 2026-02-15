@@ -1,11 +1,11 @@
 # JSCAD Vibecoder - Development Progress
 
 **Last Updated:** 2026-02-14  
-**Current Status:** 85% Complete - Production Ready 🚀
+**Current Status:** 90% Complete - Production Ready 🚀
 
 ---
 
-## ✅ Completed Features (17/20)
+## ✅ Completed Features (18/20)
 
 ### Critical Fixes & Infrastructure
 - ✅ **All Lint Errors Fixed** - Clean codebase with no TypeScript/React warnings
@@ -36,6 +36,7 @@
   - `Escape` - Close dialogs
 - ✅ **Dark/Light Theme Toggle** - System preference detection, 3 modes (light/dark/system)
 - ✅ **Undo/Redo** - Full code history tracking (50 states max) with UI buttons
+- ✅ **Draft Autosave (No New Version)** - Auto-saves edited code to current version after run (5s delay) and when AI prompt completes
 
 ### AI Features
 - ✅ **14 AI Tools** - Full tool system implemented:
@@ -56,7 +57,7 @@
 
 ---
 
-## 🚧 Remaining Features (3/20)
+## 🚧 Remaining Features (2/20)
 
 ### Medium Priority
 1. **README Documentation** - Comprehensive user and developer docs
@@ -128,9 +129,9 @@ bun run dev
 | Core Fixes | 5 | 5 | 100% ✅ |
 | 3D Modeling | 4 | 5 | 80% |
 | AI Tools | 14 | 14 | 100% ✅ |
-| UX Features | 6 | 7 | 86% |
+| UX Features | 7 | 7 | 100% ✅ |
 | Infrastructure | 2 | 3 | 67% |
-| **TOTAL** | **17** | **20** | **85%** |
+| **TOTAL** | **18** | **20** | **90%** |
 
 ---
 

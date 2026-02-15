@@ -40,8 +40,8 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const projectId = queryArgs === "skip" ? null : queryArgs.id;
   const project = useQuery(api.projects.get, queryArgs);
   const versions = useQuery(api.versions.list, queryArgs === "skip" ? "skip" : { projectId: queryArgs.id });
-  const updateProject = useMutation(api.projects.update);
   const createVersion = useMutation(api.versions.create);
+  const saveDraft = useMutation(api.versions.saveDraft);
 
   const [currentVersionId, setCurrentVersionId] = useState<string | null>(null);
   const [parameters, setParameters] = useState<ParameterValues>({});
@@ -71,14 +71,25 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const viewportRef = useRef<Viewport3DHandle>(null);
   const editorRef = useRef<CodeEditorHandle>(null);
   const parametersRef = useRef<ParameterSlidersHandle>(null);
+  const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPersistedCodeRef = useRef("");
 
   const { execute } = useJscadWorker();
 
   useEffect(() => {
     if (project && !code && project.currentVersion?.jscadCode) {
       resetCode(project.currentVersion.jscadCode);
+      lastPersistedCodeRef.current = project.currentVersion.jscadCode;
     }
   }, [project, code, resetCode]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (code) {
@@ -132,14 +143,55 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         isValid: true,
       });
       setCurrentVersionId(versionId);
+      lastPersistedCodeRef.current = code;
     } catch (err) {
       console.error("Failed to save version:", err);
     }
   }, [code, createVersion, projectId]);
 
+  const getActiveVersionId = useCallback(() => {
+    if (currentVersionId) return currentVersionId as Id<"versions">;
+    if (project?.currentVersionId) return project.currentVersionId as Id<"versions">;
+    return null;
+  }, [currentVersionId, project]);
+
+  const autosaveDraft = useCallback(async () => {
+    if (!code) return;
+
+    if (code === lastPersistedCodeRef.current) {
+      return;
+    }
+
+    const activeVersionId = getActiveVersionId();
+    if (!activeVersionId) {
+      return;
+    }
+
+    try {
+      await saveDraft({
+        id: activeVersionId,
+        jscadCode: code,
+      });
+      lastPersistedCodeRef.current = code;
+    } catch (err) {
+      console.error("Failed to autosave draft:", err);
+    }
+  }, [code, getActiveVersionId, saveDraft]);
+
+  const scheduleAutosaveDraft = useCallback((delayMs: number) => {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current);
+    }
+
+    autosaveTimeoutRef.current = setTimeout(() => {
+      void autosaveDraft();
+    }, delayMs);
+  }, [autosaveDraft]);
+
   const handleLoadVersion = useCallback((versionCode: string, versionId: string) => {
     setCode(versionCode);
     setCurrentVersionId(versionId);
+    lastPersistedCodeRef.current = versionCode;
   }, [setCode]);
 
   const handleSelectVersion = useCallback((offset: number) => {
@@ -170,6 +222,15 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     setCode(newCode);
   };
 
+  const handleRun = useCallback(async () => {
+    await executeCode();
+    scheduleAutosaveDraft(5000);
+  }, [executeCode, scheduleAutosaveDraft]);
+
+  const handlePromptComplete = useCallback(() => {
+    void autosaveDraft();
+  }, [autosaveDraft]);
+
   // Keyboard shortcuts - must be defined after all handler functions
   const shortcuts: KeyboardShortcut[] = useMemo(
     () => [
@@ -191,7 +252,9 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       {
         key: "Enter",
         ctrl: true,
-        handler: executeCode,
+        handler: () => {
+          void handleRun();
+        },
         description: "Run code",
         group: "File",
       },
@@ -358,7 +421,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     ],
     [
       handleSaveVersion,
-      executeCode,
+      handleRun,
       undoCode,
       redoCode,
       showChat,
@@ -425,14 +488,16 @@ export default function ProjectPage({ id }: ProjectPageProps) {
           </button>
           <div className="w-px h-6 bg-border mx-1" />
           <button
-            onClick={executeCode}
+            onClick={() => {
+              void handleRun();
+            }}
             disabled={isGenerating}
             className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50"
             title="Run Code (Ctrl+Enter)"
           >
-            <Play className="w-4 h-4" />
-            {isGenerating ? "Running..." : "Run"}
-          </button>
+              <Play className="w-4 h-4" />
+              {isGenerating ? "Running..." : "Run"}
+            </button>
           <button
             onClick={handleSaveVersion}
             className="flex items-center gap-2 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80"
@@ -490,6 +555,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               projectId={projectId}
               currentCode={code}
               onCodeChange={handleCodeChange}
+              onPromptComplete={handlePromptComplete}
               inputRef={chatInputRef}
             />
           </div>
