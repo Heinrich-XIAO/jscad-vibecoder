@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation } from "convex/react";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { Plus, Settings, Trash2, Clock, Box, LayoutTemplate, ChevronRight, Search, X } from "lucide-react";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
@@ -15,25 +16,13 @@ export default function DashboardPage() {
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
   const isConvexConfigured = convexUrl && convexUrl.startsWith("https://") && !convexUrl.includes("placeholder");
   
-  let projects: any;
-  let templates: any;
-  let createProject: any;
-  let deleteProject: any;
-  let convexError: string | null = null;
-  
-  if (!isConvexConfigured) {
-    convexError = "Convex not configured. Run: npx convex dev --once --configure=new";
-  } else {
-    try {
-      projects = useQuery(api.projects.list, {});
-      templates = useQuery(api.templates.list, {});
-      createProject = useMutation(api.projects.create);
-      deleteProject = useMutation(api.projects.remove);
-    } catch (error) {
-      console.log("Convex hook error:", error);
-      convexError = "Convex not configured. Run: npx convex dev --once --configure=new";
-    }
-  }
+  const projects = useQuery(api.projects.list, isConvexConfigured ? {} : "skip");
+  const templates = useQuery(api.templates.list, isConvexConfigured ? {} : "skip");
+  const createProject = useMutation(api.projects.create);
+  const deleteProject = useMutation(api.projects.remove);
+  const convexError = isConvexConfigured
+    ? null
+    : "Convex not configured. Run: npx convex dev --once --configure=new";
   
   const [showSettings, setShowSettings] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -48,27 +37,34 @@ export default function DashboardPage() {
         name: "Untitled Project",
         description: "",
       });
-      router.push(`/project/${projectId}`);
+      if (projectId) {
+        router.push(`/project/${String(projectId)}`);
+      }
     } finally {
       setIsCreating(false);
     }
   }, [createProject, router]);
 
-  const handleCreateFromTemplate = async (templateId: string) => {
+  const handleCreateFromTemplate = async (templateId: Id<"templates">) => {
     setIsCreating(true);
     try {
       const projectId = await createProject({
         name: "New Project from Template",
         description: "",
-        templateId: templateId as `templates:${string}`,
+        templateId,
       });
-      router.push(`/project/${projectId}`);
+      if (projectId) {
+        router.push(`/project/${String(projectId)}`);
+      }
     } finally {
       setIsCreating(false);
     }
   };
 
-  const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteProject = async (
+    id: Id<"projects">,
+    e: React.MouseEvent
+  ) => {
     e.stopPropagation();
     if (confirm("Delete this project?")) {
       await deleteProject({ id });
@@ -150,7 +146,9 @@ export default function DashboardPage() {
   };
 
   // Filter projects based on search query
-  const filteredProjects = projects?.filter((project: { _id: string; _creationTime: number; name: string; description?: string; updatedAt?: number }) => {
+  type ProjectListItem = Doc<"projects"> & { updatedAt?: number };
+  type TemplateListItem = Doc<"templates">;
+  const filteredProjects = (projects as ProjectListItem[] | undefined)?.filter((project) => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
     return (
@@ -259,7 +257,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredProjects?.map((project: { _id: string; _creationTime: number; name: string; description?: string; updatedAt?: number }) => (
+            {filteredProjects?.map((project) => (
               <div
                 key={project._id}
                 onClick={() => router.push(`/project/${project._id}`)}
@@ -316,7 +314,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${showTemplates ? "" : "max-h-48 overflow-hidden"}`}>
-              {templates.map((template: { _id: string; name: string; description: string; category: string }) => (
+              {(templates as TemplateListItem[]).map((template) => (
                 <div
                   key={template._id}
                   className="group bg-card border border-border rounded-lg p-5 hover:border-primary/50 hover:bg-card/80 transition-all"

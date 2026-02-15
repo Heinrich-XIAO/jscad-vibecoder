@@ -26,6 +26,7 @@ interface UseCollaborationReturn {
 export function useCollaboration(projectId: string): UseCollaborationReturn {
   const [currentUserId] = useState(() => `user_${Math.random().toString(36).substr(2, 9)}`);
   const [currentUserName] = useState(() => `User ${Math.floor(Math.random() * 1000)}`);
+  const [now, setNow] = useState(() => Date.now());
   
   // Query for online users
   const presenceData = useQuery(api.presence.list, { projectId: projectId as Id<"projects"> });
@@ -35,6 +36,10 @@ export function useCollaboration(projectId: string): UseCollaborationReturn {
   
   // Cleanup presence on unmount
   useEffect(() => {
+    const nowInterval = setInterval(() => {
+      setNow(Date.now());
+    }, 30000);
+
     const heartbeat = setInterval(() => {
       updatePresenceMutation({
         projectId: projectId as Id<"projects">,
@@ -45,6 +50,7 @@ export function useCollaboration(projectId: string): UseCollaborationReturn {
     }, 30000); // Heartbeat every 30 seconds
 
     return () => {
+      clearInterval(nowInterval);
       clearInterval(heartbeat);
     };
   }, [projectId, currentUserId, currentUserName, updatePresenceMutation]);
@@ -62,7 +68,7 @@ export function useCollaboration(projectId: string): UseCollaborationReturn {
   const onlineUsers = (presenceData || [])
     .filter((user: { userId: string; lastSeen: number }) => {
       const isCurrentUser = user.userId === currentUserId;
-      const isStale = Date.now() - user.lastSeen > 2 * 60 * 1000;
+      const isStale = now - user.lastSeen > 2 * 60 * 1000;
       return !isCurrentUser && !isStale;
     }) as UserPresence[];
   

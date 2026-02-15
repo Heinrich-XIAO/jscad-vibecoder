@@ -2,7 +2,6 @@
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertCircle, RefreshCw, Home } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 interface Props {
   children: ReactNode;
