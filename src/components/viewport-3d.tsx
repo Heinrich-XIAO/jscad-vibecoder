@@ -26,37 +26,27 @@ function renderGeometry(
 
   // geom3 format: has polygons array
   if (g.polygons && Array.isArray(g.polygons)) {
-    // First pass: fill all polygons
-    ctx.fillStyle = "rgba(99, 102, 241, 0.4)";
-    for (const polygon of g.polygons as Array<{ vertices: number[][] }>) {
-      if (!polygon.vertices || polygon.vertices.length < 3) continue;
-
-      ctx.beginPath();
-      const first = project(
-        polygon.vertices[0][0],
-        polygon.vertices[0][1],
-        polygon.vertices[0][2]
-      );
-      ctx.moveTo(first.x, first.y);
-
-      for (let i = 1; i < polygon.vertices.length; i++) {
-        const p = project(
-          polygon.vertices[i][0],
-          polygon.vertices[i][1],
-          polygon.vertices[i][2]
-        );
-        ctx.lineTo(p.x, p.y);
+    // Calculate depth for each polygon and sort by depth (painter's algorithm)
+    const polygonsWithDepth = (g.polygons as Array<{ vertices: number[][] }>).map(polygon => {
+      if (!polygon.vertices || polygon.vertices.length < 3) return null;
+      // Calculate average Z depth
+      let avgZ = 0;
+      for (const v of polygon.vertices) {
+        const projected = project(v[0], v[1], v[2]);
+        avgZ += projected.y;
       }
-      ctx.closePath();
-      ctx.fill();
-    }
+      return { polygon, depth: avgZ / polygon.vertices.length };
+    }).filter(Boolean) as Array<{ polygon: { vertices: number[][] }; depth: number }>;
     
-    // Second pass: stroke all polygons
-    ctx.strokeStyle = "#a5b4fc";
-    ctx.lineWidth = 1;
-    for (const polygon of g.polygons as Array<{ vertices: number[][] }>) {
-      if (!polygon.vertices || polygon.vertices.length < 3) continue;
-
+    // Sort by depth (far to near)
+    polygonsWithDepth.sort((a, b) => b.depth - a.depth);
+    
+    // Use even-odd fill rule
+    ctx.fillStyle = "rgba(99, 102, 241, 0.5)";
+    ctx.strokeStyle = "#818cf8";
+    ctx.lineWidth = 0.5;
+    
+    for (const { polygon } of polygonsWithDepth) {
       ctx.beginPath();
       const first = project(
         polygon.vertices[0][0],
@@ -74,6 +64,7 @@ function renderGeometry(
         ctx.lineTo(p.x, p.y);
       }
       ctx.closePath();
+      ctx.fill("evenodd");
       ctx.stroke();
     }
   }
