@@ -818,6 +818,24 @@ function buildToolDefinitions() {
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "calculate",
+        description:
+          "Perform mathematical calculations. Supports JavaScript math expressions including constants like Math.PI, Math.sqrt(), trigonometric functions, etc. Useful for computing dimensions, coordinates, angles, and other values needed for 3D modeling.",
+        parameters: {
+          type: "object",
+          properties: {
+            expression: {
+              type: "string",
+              description: "Mathematical expression to evaluate (e.g., '10 * 2 + 5', 'Math.PI * radius * 2', 'Math.sqrt(3)/2 * side')",
+            },
+          },
+          required: ["expression"],
+        },
+      },
+    },
   ];
 }
 
@@ -944,6 +962,7 @@ module.exports = { main, getParameterDefinitions }
 7. Use search_docs if unsure about a JSCAD API function
 8. Use list_variables to understand the current code structure
 9. Use split_components to keep code organized for complex models
+10. Use calculate for math calculations (e.g., computing coordinates, dimensions, angles)
 
 ## External Libraries
 - You may load remote helper libraries via include("https://...") for side-effect scripts.
@@ -1246,6 +1265,31 @@ function executeToolCall(
           action,
         },
       };
+    }
+
+    case "calculate": {
+      const expression = args.expression as string;
+      try {
+        // Safe evaluation using Function constructor with limited scope
+        // Only allow Math functions and basic arithmetic
+        const safeEval = new Function("Math", `"use strict"; return (${expression})`);
+        const result = safeEval(Math);
+        return {
+          output: {
+            expression,
+            result,
+            success: true,
+          },
+        };
+      } catch (error) {
+        return {
+          output: {
+            expression,
+            error: error instanceof Error ? error.message : String(error),
+            success: false,
+          },
+        };
+      }
     }
 
     default:

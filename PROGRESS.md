@@ -47,7 +47,7 @@
 - ✅ **AI Response Retry Button** - Retry the last user prompt directly from each assistant message
 
 ### AI Features
-- ✅ **14 AI Tools** - Full tool system implemented:
+- ✅ **15 AI Tools** - Full tool system implemented:
   - `write_code` - Complete code generation
   - `edit_code` - Targeted edits with search/replace
   - `read_code` - Read current code
@@ -62,6 +62,7 @@
   - `diff_versions` - Version comparison
   - `split_components` - Component management
   - `render_preview` - Preview generation
+  - `calculate` - Math calculations for dimensions/angles
 - ✅ **Runtime JSCAD Check After AI Edits** - Auto-runs JSCAD after edit/write tool calls using parameter defaults and reports errors
 
 ---
@@ -137,11 +138,11 @@ bun run dev
 |----------|-----------|-------|----------|
 | Core Fixes | 5 | 5 | 100% ✅ |
 | 3D Modeling | 4 | 5 | 80% |
-| AI Tools | 14 | 14 | 100% ✅ |
+| AI Tools | 15 | 15 | 100% ✅ |
 | AI Runtime Checks | 1 | 1 | 100% ✅ |
 | UX Features | 7 | 7 | 100% ✅ |
 | Infrastructure | 2 | 3 | 67% |
-| **TOTAL** | **19** | **21** | **90%** |
+| **TOTAL** | **20** | **22** | **91%** |
 
 ---
 
