@@ -22,3 +22,10 @@
 
 ## Mistake Log
 * If you make a mistake that costs a significant amount of time, write it down in this file for future agents.
+ 
+## Commit & Push Policy (project-local override)
+* After finishing a requested code change, the agent SHOULD create a commit and push it to the repository remote so changes are persisted and visible to collaborators.
+  - This is a project-level override to the default agent behavior; use with caution.
+  - Agents must NOT push forcefully or change git config. If a push is rejected due to remote changes, stop and notify a human.
+  - Do not commit secrets or credentials. If changes include potential secrets, abort the push and notify the user.
+  - If a pre-commit hook fails, do not amend the commit; instead surface the failure and let a human resolve it.
