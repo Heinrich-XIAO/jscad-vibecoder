@@ -7,7 +7,9 @@ if(typeof window.jscad.tspi !== 'object') { window.jscad.tspi = new Object(); }
 window.jscad.tspi.involuteGear = function(printer, params) {
 	knownParameters = [
 		{ name: 'teethNumber',			type: 'number',					default: -1				},
-		{ name: 'module',				type: 'number',					default: 1				},
+		{ name: 'module',				type: 'number',					default: -1				},
+		{ name: 'pitchDiameter',		type: 'number',					default: -1				},
+		{ name: 'circularToothThickness', type: 'number',					default: -1				},
 		{ name: 'pressureAngle',		type: 'number',					default: 20				},
 		{ name: 'clearance',			type: 'number',					default: 0				},
 		{ name: 'thickness',			type: 'number',					default: -1				},
@@ -53,17 +55,61 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 	this.inclination				= this.parameters['inclination'];
 	this.inclinationSteps			= this.parameters['inclinationSteps'];
 
-	this.module						= this.parameters['module'];
-	this.circularPitch				= this.module * Math.PI;
 	this.pressureAngle				= this.parameters['pressureAngle'];
-	this.teethNumber				= this.parameters['teethNumber'];
 	this.clearance					= this.parameters['clearance'];
+	
+	// Calculate module and teethNumber from provided parameters
+	var inputModule = this.parameters['module'];
+	var inputTeethNumber = this.parameters['teethNumber'];
+	var inputPitchDiameter = this.parameters['pitchDiameter'];
+	var inputCircularToothThickness = this.parameters['circularToothThickness'];
+	
+	// Determine module and teethNumber based on which parameters were provided
+	if (inputPitchDiameter > 0 && inputTeethNumber > 0) {
+		// Method 1: pitchDiameter + teethNumber
+		this.teethNumber = inputTeethNumber;
+		this.module = inputPitchDiameter / this.teethNumber;
+	} else if (inputPitchDiameter > 0 && inputCircularToothThickness > 0) {
+		// Method 2: pitchDiameter + circularToothThickness
+		// Standard circular tooth thickness at pitch diameter = circularPitch / 2 = module * PI / 2
+		this.module = (2 * inputCircularToothThickness) / Math.PI;
+		this.teethNumber = Math.round(inputPitchDiameter / this.module);
+		// Recalculate module based on rounded teeth number
+		this.module = inputPitchDiameter / this.teethNumber;
+	} else if (inputModule > 0 && inputPitchDiameter > 0) {
+		// Method 3: module + pitchDiameter
+		this.module = inputModule;
+		this.teethNumber = Math.round(inputPitchDiameter / this.module);
+		// Recalculate module based on rounded teeth number
+		this.module = inputPitchDiameter / this.teethNumber;
+	} else if (inputModule > 0 && inputCircularToothThickness > 0) {
+		// Method 4: module + circularToothThickness - need teethNumber
+		if (inputTeethNumber > 0) {
+			this.module = inputModule;
+			this.teethNumber = inputTeethNumber;
+		} else {
+			// Default to module-based calculation with default teeth
+			this.module = inputModule;
+			this.teethNumber = 20;
+		}
+	} else if (inputTeethNumber > 0 && inputCircularToothThickness > 0) {
+		// Method 5: teethNumber + circularToothThickness
+		this.teethNumber = inputTeethNumber;
+		this.module = (2 * inputCircularToothThickness) / Math.PI;
+	} else {
+		// Default: module + teethNumber (original behavior)
+		this.module = inputModule > 0 ? inputModule : 1;
+		this.teethNumber = inputTeethNumber > 0 ? inputTeethNumber : 20;
+	}
+	
+	this.circularPitch				= this.module * Math.PI;
 
 	this.centerholeRadius			= this.parameters['centerholeRadius'] + (this.printer['correctionInsideDiameter'] / 2.0);
 	this.doubleHelical				= this.parameters['doubleHelical'];
 
 	this.pitchDiameter				= this.teethNumber * this.module;
 	this.pitchRadius				= this.pitchDiameter / 2.0;
+	this.circularToothThickness		= this.circularPitch / 2.0;
 	this.baseCircleDiameter			= this.pitchDiameter * Math.cos(this.pressureAngle * Math.PI/180.0);
 	this.baseCircleRadius			= this.baseCircleDiameter / 2.0;
 	this.addendum					= this.module;
@@ -163,4 +209,46 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 		return result.rotateZ(-360 / (4 * this.teethNumber));
 	};
 }
+
+// Convenience functions for different parameter combinations
+window.jscad.tspi.involuteGearByModuleTeeth = function(printer, module, teethNumber, pressureAngle, thickness, centerholeRadius) {
+	return new window.jscad.tspi.involuteGear(printer, {
+		module: module,
+		teethNumber: teethNumber,
+		pressureAngle: pressureAngle || 20,
+		thickness: thickness,
+		centerholeRadius: centerholeRadius || 0
+	});
+};
+
+window.jscad.tspi.involuteGearByPitchDiameterTeeth = function(printer, pitchDiameter, teethNumber, pressureAngle, thickness, centerholeRadius) {
+	return new window.jscad.tspi.involuteGear(printer, {
+		pitchDiameter: pitchDiameter,
+		teethNumber: teethNumber,
+		pressureAngle: pressureAngle || 20,
+		thickness: thickness,
+		centerholeRadius: centerholeRadius || 0
+	});
+};
+
+window.jscad.tspi.involuteGearByPitchDiameterCircularToothThickness = function(printer, pitchDiameter, circularToothThickness, pressureAngle, thickness, centerholeRadius) {
+	return new window.jscad.tspi.involuteGear(printer, {
+		pitchDiameter: pitchDiameter,
+		circularToothThickness: circularToothThickness,
+		pressureAngle: pressureAngle || 20,
+		thickness: thickness,
+		centerholeRadius: centerholeRadius || 0
+	});
+};
+
+window.jscad.tspi.involuteGearByModuleCircularToothThickness = function(printer, module, circularToothThickness, teethNumber, pressureAngle, thickness, centerholeRadius) {
+	return new window.jscad.tspi.involuteGear(printer, {
+		module: module,
+		circularToothThickness: circularToothThickness,
+		teethNumber: teethNumber,
+		pressureAngle: pressureAngle || 20,
+		thickness: thickness,
+		centerholeRadius: centerholeRadius || 0
+	});
+};
 })();
