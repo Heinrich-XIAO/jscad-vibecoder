@@ -62,11 +62,11 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 	this.centerholeRadius			= this.parameters['centerholeRadius'] + (this.printer['correctionInsideDiameter'] / 2.0);
 	this.doubleHelical				= this.parameters['doubleHelical'];
 
-	this.pitchDiameter				= this.teethNumber / this.circularPitch;
+	this.pitchDiameter				= this.teethNumber * this.module;
 	this.pitchRadius				= this.pitchDiameter / 2.0;
 	this.baseCircleDiameter			= this.pitchDiameter * Math.cos(this.pressureAngle * Math.PI/180.0);
 	this.baseCircleRadius			= this.baseCircleDiameter / 2.0;
-	this.addendum					= 1.0 / this.circularPitch;
+	this.addendum					= this.module;
 	this.dedendum					= this.addendum - this.clearance;
 	this.outsideDiameter			= this.pitchDiameter + 2*this.addendum;
 	this.outsideRadius				= this.outsideDiameter / 2.0;
