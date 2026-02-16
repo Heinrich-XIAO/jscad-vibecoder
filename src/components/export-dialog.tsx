@@ -108,34 +108,34 @@ export function ExportDialog({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-md p-6">
+      <div className="bg-card border border-border rounded-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <FileBox className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-lg font-semibold text-zinc-200">Export Model</h2>
+            <FileBox className="w-5 h-5 text-indigo-500" />
+            <h2 className="text-lg font-semibold text-foreground">Export Model</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-zinc-800 rounded-md transition-colors"
+            className="p-1 hover:bg-secondary rounded-md transition-colors"
           >
-            <X className="w-5 h-5 text-zinc-400" />
+            <X className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
 
         {/* Preview */}
         <div className="mb-6">
-          <label className="text-sm font-medium text-zinc-400 mb-2 block">
+          <label className="text-sm font-medium text-muted-foreground mb-2 block">
             Preview
           </label>
           <ThumbnailPreview 
             geometry={geometry} 
-            className="w-full h-48 border border-zinc-700 rounded-lg"
+            className="w-full h-48 border border-border rounded-lg"
           />
         </div>
 
         {/* Format selection */}
         <div className="mb-6">
-          <label className="text-sm font-medium text-zinc-400 mb-2 block">
+          <label className="text-sm font-medium text-muted-foreground mb-2 block">
             Format
           </label>
           <div className="grid grid-cols-2 gap-2">
@@ -145,8 +145,8 @@ export function ExportDialog({
                 onClick={() => setFormat(f)}
                 className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
                   format === f
-                    ? "bg-indigo-950/50 border-indigo-600 text-indigo-200"
-                    : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-600"
+                    ? "bg-primary/10 border-primary text-primary"
+                    : "bg-secondary border-border text-muted-foreground hover:border-muted-foreground"
                 }`}
               >
                 .{f.toUpperCase()}

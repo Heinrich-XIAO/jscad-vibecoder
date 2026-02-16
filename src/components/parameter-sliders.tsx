@@ -79,7 +79,7 @@ function ParameterControl({
   if (parameter.type === "number") {
     return (
       <div className="flex items-center gap-2">
-        <label className="text-xs text-zinc-400 min-w-[80px] truncate">
+        <label className="text-xs text-muted-foreground min-w-[80px] truncate">
           {parameter.label}
         </label>
         <input
@@ -89,7 +89,7 @@ function ParameterControl({
           step={parameter.step ?? 0.1}
           value={localValue as number}
           onChange={(e) => handleChange(parseFloat(e.target.value))}
-          className="flex-1 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+          className="flex-1 h-1 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
         />
         <input
           type="number"
@@ -98,12 +98,12 @@ function ParameterControl({
           max={parameter.max}
           step={parameter.step}
           onChange={(e) => handleChange(parseFloat(e.target.value))}
-          className="w-14 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 text-right"
+          className="w-14 bg-background border border-input rounded px-2 py-1 text-xs text-foreground text-right"
         />
         {onReset && !isDefault && (
           <button
             onClick={onReset}
-            className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
             title="Reset to default"
           >
             <RotateCcw className="w-3 h-3" />
@@ -116,19 +116,19 @@ function ParameterControl({
   if (parameter.type === "boolean") {
     return (
       <div className="flex items-center gap-2">
-        <label className="text-xs text-zinc-400 min-w-[80px] truncate">
+        <label className="text-xs text-muted-foreground min-w-[80px] truncate">
           {parameter.label}
         </label>
         <input
           type="checkbox"
           checked={localValue as boolean}
           onChange={(e) => handleChange(e.target.checked)}
-          className="accent-indigo-500"
+          className="accent-primary"
         />
         {onReset && !isDefault && (
           <button
             onClick={onReset}
-            className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors ml-auto"
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors ml-auto"
             title="Reset to default"
           >
             <RotateCcw className="w-3 h-3" />
@@ -141,19 +141,19 @@ function ParameterControl({
   if (parameter.type === "text") {
     return (
       <div className="flex items-center gap-2">
-        <label className="text-xs text-zinc-400 min-w-[80px] truncate">
+        <label className="text-xs text-muted-foreground min-w-[80px] truncate">
           {parameter.label}
         </label>
         <input
           type="text"
           value={localValue as string}
           onChange={(e) => handleChange(e.target.value)}
-          className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300"
+          className="flex-1 bg-background border border-input rounded px-2 py-1 text-xs text-foreground"
         />
         {onReset && !isDefault && (
           <button
             onClick={onReset}
-            className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
             title="Reset to default"
           >
             <RotateCcw className="w-3 h-3" />

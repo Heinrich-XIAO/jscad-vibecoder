@@ -3,16 +3,16 @@
 
 :root {
   /* Light theme (default) */
-  --background: #ffffff;
-  --foreground: #0a0a0a;
-  --card: #f5f5f5;
-  --card-foreground: #0a0a0a;
+  --background: #fafafa;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
   --primary: #2563eb;
   --primary-foreground: #ffffff;
-  --secondary: #e5e5e5;
-  --secondary-foreground: #0a0a0a;
-  --muted: #e5e5e5;
-  --muted-foreground: #737373;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #262626;
+  --muted: #f5f5f5;
+  --muted-foreground: #525252;
   --border: #e5e5e5;
   --input: #e5e5e5;
   --ring: #2563eb;

@@ -447,11 +447,11 @@ export function ChatPanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border-r border-zinc-800">
+    <div className="flex flex-col h-full bg-card border-r border-border">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-800">
-        <MessageSquare className="w-4 h-4 text-indigo-400" />
-        <h2 className="text-sm font-medium text-zinc-200">Chat</h2>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+        <MessageSquare className="w-4 h-4 text-indigo-500" />
+        <h2 className="text-sm font-medium text-foreground">Chat</h2>
       </div>
 
       {/* Messages */}
@@ -467,13 +467,13 @@ export function ChatPanel({
         ))}
 
         {isGenerating && (
-          <div className="rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-3 space-y-2">
-            <div className="flex items-center gap-2 text-emerald-300 text-sm">
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 dark:border-emerald-900/60 dark:bg-emerald-950/20 p-3 space-y-2">
+            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300 text-sm">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>{streamStatus || "Running tools..."}</span>
             </div>
             {liveAssistantMessage && (
-              <div className="rounded-md border border-emerald-900/40 bg-zinc-950/40 p-2 text-sm text-emerald-100/90 prose prose-sm prose-invert max-w-none">
+              <div className="rounded-md border border-emerald-500/20 bg-background/50 dark:border-emerald-900/40 dark:bg-zinc-950/40 p-2 text-sm text-emerald-800 dark:text-emerald-100/90 prose prose-sm dark:prose-invert max-w-none">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {liveAssistantMessage}
                 </ReactMarkdown>
@@ -484,15 +484,15 @@ export function ChatPanel({
                 {liveToolCalls.map((call) => (
                   <div
                     key={call.id}
-                    className="text-xs rounded bg-zinc-900/70 border border-zinc-800 px-2 py-1 text-zinc-300 flex items-center gap-2"
+                    className="text-xs rounded bg-secondary/70 border border-border px-2 py-1 text-secondary-foreground flex items-center gap-2"
                   >
                     {call.status === "running" ? (
-                      <Loader2 className="w-3 h-3 animate-spin text-emerald-400" />
+                      <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />
                     ) : (
-                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                     )}
                     <span className="font-mono">{call.toolName}</span>
-                    <span className="text-zinc-500">({call.index}/{call.total})</span>
+                    <span className="text-muted-foreground">({call.index}/{call.total})</span>
                   </div>
                 ))}
               </div>
@@ -506,7 +506,7 @@ export function ChatPanel({
       {/* Input */}
       <form
         onSubmit={handleSubmit}
-        className="border-t border-zinc-800 p-3"
+        className="border-t border-border p-3"
       >
         <div className="relative h-full">
           <textarea
@@ -515,14 +515,14 @@ export function ChatPanel({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Describe what you want to build..."
-            className="h-full w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 pr-12 text-sm text-zinc-200 placeholder:text-zinc-600 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="h-full w-full bg-background border border-input rounded-lg px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring"
             rows={3}
             disabled={isGenerating}
           />
           <button
             type="submit"
             disabled={!input.trim() || isGenerating}
-            className="absolute right-2 bottom-2 p-2 rounded-md bg-indigo-600 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-500 transition-colors"
+            className="absolute right-2 bottom-2 p-2 rounded-md bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
           >
             {isGenerating ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -551,30 +551,30 @@ function MessageBubble({
     user: {
       icon: User,
       label: "You",
-      bgColor: "bg-indigo-950/50",
-      borderColor: "border-indigo-900/50",
-      textColor: "text-zinc-200",
+      bgColor: "bg-indigo-500/10 dark:bg-indigo-950/50",
+      borderColor: "border-indigo-500/30 dark:border-indigo-900/50",
+      textColor: "text-foreground",
     },
     assistant: {
       icon: Bot,
       label: "AI",
-      bgColor: "bg-zinc-900/50",
-      borderColor: "border-zinc-800",
-      textColor: "text-zinc-300",
+      bgColor: "bg-secondary/50",
+      borderColor: "border-border",
+      textColor: "text-secondary-foreground",
     },
     system: {
       icon: AlertCircle,
       label: "System",
-      bgColor: "bg-amber-950/30",
-      borderColor: "border-amber-900/30",
-      textColor: "text-amber-200/80",
+      bgColor: "bg-amber-500/10 dark:bg-amber-950/30",
+      borderColor: "border-amber-500/30 dark:border-amber-900/30",
+      textColor: "text-amber-700 dark:text-amber-200/80",
     },
     tool: {
       icon: Wrench,
       label: "Tools",
-      bgColor: "bg-emerald-950/30",
-      borderColor: "border-emerald-900/30",
-      textColor: "text-emerald-200/80",
+      bgColor: "bg-emerald-500/10 dark:bg-emerald-950/30",
+      borderColor: "border-emerald-500/30 dark:border-emerald-900/30",
+      textColor: "text-emerald-700 dark:text-emerald-200/80",
     },
   };
 
@@ -587,13 +587,13 @@ function MessageBubble({
         className={`rounded-lg border p-3 ${config.bgColor} ${config.borderColor}`}
       >
         <div className="flex items-center gap-2 mb-1">
-          <Icon className="w-3.5 h-3.5 text-zinc-500" />
-          <span className="text-xs font-medium text-zinc-500">
+          <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">
             {config.label}
           </span>
         </div>
         <div
-          className={`text-sm ${config.textColor} prose prose-sm prose-invert max-w-none break-words [&>p]:mb-2 [&>p:last-child]:mb-0 [&>pre]:bg-black/50 [&>pre]:p-2 [&>pre]:rounded-md`}
+          className={`text-sm ${config.textColor} prose prose-sm dark:prose-invert max-w-none break-words [&>p]:mb-2 [&>p:last-child]:mb-0 [&>pre]:bg-black/50 [&>pre]:p-2 [&>pre]:rounded-md`}
         >
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {message.content}
@@ -610,7 +610,7 @@ function MessageBubble({
           <button
             onClick={() => onRetry(retryPrompt)}
             disabled={isGenerating}
-            className="text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Retry this prompt"
             type="button"
           >
@@ -688,12 +688,12 @@ function ToolCallsDisplay({
       {expanded && (
         <div className="mt-2 space-y-2">
           {toolCalls.map((tc, i) => (
-            <div key={i} className="bg-zinc-900 rounded p-2 text-xs font-mono">
-              <div className="text-emerald-400 mb-1">{tc.toolName}</div>
-              <div className="text-zinc-500">
+            <div key={i} className="bg-secondary rounded p-2 text-xs font-mono">
+              <div className="text-emerald-600 dark:text-emerald-400 mb-1">{tc.toolName}</div>
+              <div className="text-muted-foreground">
                 {JSON.stringify(tc.args, null, 2).substring(0, 200)}
               </div>
-              <div className="text-zinc-400 mt-1">
+              <div className="text-secondary-foreground mt-1">
                 {JSON.stringify(tc.result, null, 2).substring(0, 200)}
               </div>
             </div>

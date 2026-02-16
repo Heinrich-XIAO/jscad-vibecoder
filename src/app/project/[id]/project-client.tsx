@@ -606,7 +606,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
                 </h3>
                 <button
                   onClick={handleResetParameters}
-                  className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   title="Reset to defaults"
                 >
                   Reset

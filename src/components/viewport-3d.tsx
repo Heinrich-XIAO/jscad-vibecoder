@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from "react";
+import { useTheme } from "@/lib/theme-provider";
 import * as THREE from "three";
 
 export interface Viewport3DHandle {
@@ -61,6 +62,8 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const meshGroupRef = useRef<THREE.Group | null>(null);
+  const gridMaterialRef = useRef<THREE.LineBasicMaterial | null>(null);
+  const axesHelperRef = useRef<THREE.AxesHelper | null>(null);
   const [rotation, setRotation] = useState({ x: -30, y: 45 });
   const [isDragging, setIsDragging] = useState(false);
   const lastPos = useRef({ x: 0, y: 0 });
@@ -103,15 +106,53 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Grid
-    const gridHelper = new THREE.GridHelper(400, 20, 0x2a2a3e, 0x2a2a3e);
+    // Custom grid with gaps where axes are (to prevent z-fighting)
+    const gridSize = 400;
+    const gridDivisions = 20;
+    const step = gridSize / gridDivisions;
+    const gap = 2; // Small gap around axes
+    const gridGeometry = new THREE.BufferGeometry();
+    const gridVertices: number[] = [];
+    
+    // Lines parallel to X axis (along Z) - skip lines too close to X axis (Z=0)
+    for (let i = 0; i <= gridDivisions; i++) {
+      const z = -gridSize/2 + i * step;
+      if (Math.abs(z) > gap) {
+        gridVertices.push(-gridSize/2, 0, z, gridSize/2, 0, z);
+      }
+    }
+    
+    // Lines parallel to Z axis (along X) - skip lines too close to Z axis (X=0)
+    for (let i = 0; i <= gridDivisions; i++) {
+      const x = -gridSize/2 + i * step;
+      if (Math.abs(x) > gap) {
+        gridVertices.push(x, 0, -gridSize/2, x, 0, gridSize/2);
+      }
+    }
+    
+    gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(gridVertices, 3));
+    const gridMaterial = new THREE.LineBasicMaterial({ color: 0x2a2a3e });
+    gridMaterialRef.current = gridMaterial;
+    const gridHelper = new THREE.LineSegments(gridGeometry, gridMaterial);
     gridHelper.renderOrder = 1000;
     scene.add(gridHelper);
 
-    // Axes - render on top to avoid z-fighting
+    // Axes - render on top to avoid z-fighting with grid
     const axesHelper = new THREE.AxesHelper(60);
+    axesHelper.position.y = 0.01; // Slightly above grid
     axesHelper.renderOrder = 1001;
-    axesHelper.material.depthTest = false;
+    // Store axes helper for dynamic theme updates
+    axesHelperRef.current = axesHelper;
+    // AxesHelper.material may be array or single material; disable depthTest where possible
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const axesMatAny: any = (axesHelper as any).material;
+    if (axesMatAny) {
+      if (Array.isArray(axesMatAny)) {
+        axesMatAny.forEach((m: THREE.Material) => { try { (m as any).depthTest = false; } catch (_) {} });
+      } else {
+        try { (axesMatAny as any).depthTest = false; } catch (_) {}
+      }
+    }
     scene.add(axesHelper);
 
     // Mesh group to hold all geometry
@@ -145,6 +186,111 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
       container.removeChild(renderer.domElement);
     };
   }, []);
+
+  const { resolvedTheme } = useTheme();
+
+  // Apply theme to scene, renderer and helpers without recreating the whole scene.
+  useEffect(() => {
+    const isDark = resolvedTheme === "dark";
+    const scene = sceneRef.current;
+    const renderer = rendererRef.current;
+    if (!scene || !renderer) return;
+
+    const bgColor = isDark ? 0x0a0a0a : 0xfafafa;
+    scene.background = new THREE.Color(bgColor);
+    renderer.setClearColor(bgColor);
+
+    // Update grid color
+    if (gridMaterialRef.current) {
+      gridMaterialRef.current.color.set(isDark ? 0x2a2a3e : 0xd1d5db);
+    }
+
+    // Update axes colors: keep distinct RGB colors for X/Y/Z for clarity
+    const axes = axesHelperRef.current;
+    if (axes) {
+      try {
+        // AxesHelper in three.js renders 3 lines; materials may be a single material or array
+        // We'll create a small custom axes group with distinct RGB colors so axes remain visible and distinctive.
+
+        const customAxes = new THREE.Group();
+        customAxes.name = "custom_axes_rgb";
+        const axisLength = 60;
+
+        // X axis - red
+        const xMat = new THREE.LineBasicMaterial({ color: 0xc62828, linewidth: 2 });
+        const xGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(axisLength, 0.01, 0)]);
+        const xLine = new THREE.Line(xGeom, xMat);
+        customAxes.add(xLine);
+
+        // Y axis - pure green (0,255,0)
+        const yMat = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 });
+        const yGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(0, axisLength, 0)]);
+        const yLine = new THREE.Line(yGeom, yMat);
+        customAxes.add(yLine);
+
+        // Z axis - blue
+        const zMat = new THREE.LineBasicMaterial({ color: 0x1565c0, linewidth: 2 });
+        const zGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(0, 0.01, axisLength)]);
+        const zLine = new THREE.Line(zGeom, zMat);
+        customAxes.add(zLine);
+
+        customAxes.renderOrder = 1002;
+
+        // Attach to axes parent if available, otherwise attach to scene root
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const attachTarget = ((axes.parent ?? sceneRef.current) as any) as THREE.Object3D;
+        if (attachTarget) {
+          const existingCustom = attachTarget.getObjectByName("custom_axes_rgb");
+          if (existingCustom) attachTarget.remove(existingCustom);
+          attachTarget.add(customAxes);
+
+          // Hide or remove the original AxesHelper to avoid overlap/duplicate lines
+          const origAxes = axesHelperRef.current;
+          if (origAxes) {
+            try {
+              if (origAxes.parent) {
+                origAxes.parent.remove(origAxes);
+              } else {
+                origAxes.visible = false;
+              }
+            } catch (_) {
+              try { origAxes.visible = false; } catch (_) {}
+            }
+          }
+        }
+      } catch (err) {
+        // fallback: attempt to tint existing axes materials
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const matsAny: any = (axes as any).material;
+        if (matsAny) {
+            if (Array.isArray(matsAny)) {
+            matsAny[0] && matsAny[0].color && matsAny[0].color.set(0xc62828);
+            matsAny[1] && matsAny[1].color && matsAny[1].color.set(0x00ff00);
+            matsAny[2] && matsAny[2].color && matsAny[2].color.set(0x1565c0);
+          } else if (matsAny.color) {
+            matsAny.color.set(0x444444);
+          }
+        }
+      }
+    }
+
+    // Update existing meshes/lines colors for readability in light mode
+    if (meshGroupRef.current) {
+      meshGroupRef.current.traverse((child: any) => {
+        if (child.isMesh) {
+          const mat = child.material;
+          const col = isDark ? 0xc0c0c0 : 0x2f2f2f;
+          if (Array.isArray(mat)) mat.forEach((m: any) => { if (m.color) m.color.set(col); });
+          else if (mat && mat.color) mat.color.set(col);
+        }
+        if (child.type === "LineSegments" || child.isLine) {
+          const lm = child.material;
+          const lcol = isDark ? 0x000000 : 0x111827;
+          if (lm && lm.color) lm.color.set(lcol);
+        }
+      });
+    }
+  }, [resolvedTheme]);
 
   // Update camera position based on rotation and zoom
   useEffect(() => {
@@ -187,10 +333,10 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
       const threeGeom = jscadToThreeGeometry(geom);
       if (!threeGeom) continue;
 
-      // Create solid mesh (grey, slightly transparent)
+      // Create solid mesh (light grey, slightly transparent)
       const solidMaterial = new THREE.MeshPhongMaterial({
-        color: 0x808080,
-        opacity: 0.9,
+        color: 0xc0c0c0,
+        opacity: 0.75,
         transparent: true,
         side: THREE.DoubleSide,
       });

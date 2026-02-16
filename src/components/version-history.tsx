@@ -28,7 +28,7 @@ export function VersionHistory({
 }: VersionHistoryProps) {
   if (versions.length === 0) {
     return (
-      <div className={`text-center py-4 text-zinc-600 text-sm ${className}`}>
+      <div className={`text-center py-4 text-muted-foreground text-sm ${className}`}>
         No versions yet
       </div>
     );
@@ -37,8 +37,8 @@ export function VersionHistory({
   return (
     <div className={`space-y-1 ${className}`}>
       <div className="flex items-center gap-2 mb-3">
-        <History className="w-4 h-4 text-violet-400" />
-        <h3 className="text-sm font-medium text-zinc-200">Version History</h3>
+        <History className="w-4 h-4 text-violet-500" />
+        <h3 className="text-sm font-medium text-foreground">Version History</h3>
       </div>
       {versions.map((version) => (
         <button
@@ -56,24 +56,24 @@ export function VersionHistory({
             <span
               className={`text-xs px-1.5 py-0.5 rounded ${
                 version.source === "ai"
-                  ? "bg-indigo-900/50 text-indigo-300"
+                  ? "bg-indigo-500/20 text-indigo-600 dark:text-indigo-300"
                   : version.source === "manual"
-                    ? "bg-emerald-900/50 text-emerald-300"
-                    : "bg-amber-900/50 text-amber-300"
+                    ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-300"
+                    : "bg-amber-500/20 text-amber-600 dark:text-amber-300"
               }`}
             >
               {version.source}
             </span>
             {!version.isValid && (
-              <span className="text-xs text-red-400">error</span>
+              <span className="text-xs text-red-500">error</span>
             )}
           </div>
           {version.prompt && (
-            <p className="text-xs text-zinc-600 mt-1 truncate">
+            <p className="text-xs text-muted-foreground mt-1 truncate">
               {version.prompt}
             </p>
           )}
-          <p className="text-xs text-zinc-700 mt-0.5">
+          <p className="text-xs text-muted-foreground/60 mt-0.5">
             {new Date(version._creationTime).toLocaleString()}
           </p>
         </button>

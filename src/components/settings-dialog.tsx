@@ -27,23 +27,23 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-md p-6">
+      <div className="bg-card border border-border rounded-xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <Settings className="w-5 h-5 text-zinc-400" />
-            <h2 className="text-lg font-semibold text-zinc-200">Settings</h2>
+            <Settings className="w-5 h-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold text-foreground">Settings</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-zinc-800 rounded-md transition-colors"
+            className="p-1 hover:bg-secondary rounded-md transition-colors"
           >
-            <X className="w-5 h-5 text-zinc-400" />
+            <X className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
 
         {/* OpenRouter API Key */}
         <div className="mb-5">
-          <label className="flex items-center gap-2 text-sm font-medium text-zinc-400 mb-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
             <Key className="w-3.5 h-3.5" />
             OpenRouter API Key
           </label>
@@ -54,15 +54,15 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
               setSettings({ ...settings, apiKey: e.target.value })
             }
             placeholder="sk-or-..."
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full bg-secondary border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
-          <p className="text-xs text-zinc-600 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Get your key at{" "}
             <a
               href="https://openrouter.ai/keys"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-indigo-400 hover:underline"
+              className="text-primary hover:underline"
             >
               openrouter.ai/keys
             </a>
@@ -71,7 +71,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
         {/* Model selection */}
         <div className="mb-5">
-          <label className="flex items-center gap-2 text-sm font-medium text-zinc-400 mb-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
             <Cpu className="w-3.5 h-3.5" />
             Model
           </label>
@@ -80,7 +80,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             onChange={(e) =>
               setSettings({ ...settings, model: e.target.value })
             }
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full bg-secondary border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           >
             {AVAILABLE_MODELS.map((m) => (
               <option key={m.id} value={m.id}>
@@ -92,7 +92,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
         {/* Theme selection */}
         <div className="mb-5">
-          <label className="flex items-center gap-2 text-sm font-medium text-zinc-400 mb-2">
+          <label className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-2">
             {resolvedTheme === "dark" ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
             Theme
           </label>
@@ -103,8 +103,8 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 onClick={() => setTheme(t)}
                 className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                   theme === t
-                    ? "bg-indigo-600 text-white"
-                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground hover:bg-muted"
                 }`}
               >
                 {t === "light" && <Sun className="w-4 h-4" />}
@@ -114,14 +114,14 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
               </button>
             ))}
           </div>
-          <p className="text-xs text-zinc-600 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Currently using {resolvedTheme} mode
           </p>
         </div>
 
         {/* Temperature */}
         <div className="mb-6">
-          <label className="text-sm font-medium text-zinc-400 mb-2 block">
+          <label className="text-sm font-medium text-muted-foreground mb-2 block">
             Temperature: {settings.temperature}
           </label>
           <input
@@ -136,9 +136,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 temperature: parseFloat(e.target.value),
               })
             }
-            className="w-full h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+            className="w-full h-1 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
           />
-          <div className="flex justify-between text-xs text-zinc-600 mt-1">
+          <div className="flex justify-between text-xs text-muted-foreground mt-1">
             <span>Precise</span>
             <span>Creative</span>
           </div>
@@ -148,13 +148,13 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 border border-zinc-700 text-zinc-400 rounded-lg text-sm hover:bg-zinc-800 transition-colors"
+            className="flex-1 px-4 py-2 border border-border text-muted-foreground rounded-lg text-sm hover:bg-secondary transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-500 transition-colors"
+            className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
           >
             Save
           </button>

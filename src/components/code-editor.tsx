@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useImperativeHandle, forwardRef } from "react";
+import { useTheme } from "@/lib/theme-provider";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import { Code2 } from "lucide-react";
 
@@ -45,21 +46,24 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     editorRef.current = editor;
   };
 
+  const { resolvedTheme } = useTheme();
+  const monacoTheme = resolvedTheme === "dark" ? "vs-dark" : "vs";
+
   return (
-    <div className={`flex flex-col h-full bg-zinc-950 ${className}`}>
+    <div className={`flex flex-col h-full bg-card ${className}`}>
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-800">
-        <Code2 className="w-4 h-4 text-emerald-400" />
-        <h2 className="text-sm font-medium text-zinc-200">JSCAD Code</h2>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+        <Code2 className="w-4 h-4 text-emerald-500" />
+        <h2 className="text-sm font-medium text-foreground">JSCAD Code</h2>
         {readOnly && (
-          <span className="text-xs text-zinc-600 ml-auto">Read Only</span>
+          <span className="text-xs text-muted-foreground ml-auto">Read Only</span>
         )}
       </div>
 
       {/* Error display */}
       {error && (
-        <div className="px-4 py-2 bg-red-950/50 border-b border-red-900/50">
-          <div className="text-xs text-red-400 font-mono">
+        <div className="px-4 py-2 bg-red-500/10 dark:bg-red-950/50 border-b border-red-500/30 dark:border-red-900/50">
+          <div className="text-xs text-red-600 dark:text-red-400 font-mono">
             {error}
           </div>
         </div>
@@ -73,7 +77,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
           value={code}
           onChange={handleEditorChange}
           onMount={handleEditorDidMount}
-          theme="vs-dark"
+          theme={monacoTheme}
           options={{
             minimap: { enabled: false },
             fontSize: 13,
