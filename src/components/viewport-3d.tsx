@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from "react";
+import * as THREE from "three";
 
 export interface Viewport3DHandle {
   rotate: (dx: number, dy: number) => void;
@@ -15,267 +16,220 @@ interface Viewport3DProps {
   className?: string;
 }
 
-// Helper function to render geometry polygons as wireframe
-function renderGeometry(
-  ctx: CanvasRenderingContext2D,
-  geom: unknown,
-  project: (x: number, y: number, z: number) => { x: number; y: number }
-) {
-  // Try to extract polygons from JSCAD geometry
+// Convert JSCAD geometry to Three.js BufferGeometry
+function jscadToThreeGeometry(geom: unknown): THREE.BufferGeometry | null {
   const g = geom as Record<string, unknown>;
-
-  // geom3 format: has polygons array
-  if (g.polygons && Array.isArray(g.polygons)) {
-    // Calculate depth for each polygon and sort by depth (painter's algorithm)
-    const polygonsWithDepth = (g.polygons as Array<{ vertices: number[][] }>).map(polygon => {
-      if (!polygon.vertices || polygon.vertices.length < 3) return null;
-      // Calculate average Z depth
-      let avgZ = 0;
-      for (const v of polygon.vertices) {
-        const projected = project(v[0], v[1], v[2]);
-        avgZ += projected.y;
-      }
-      return { polygon, depth: avgZ / polygon.vertices.length };
-    }).filter(Boolean) as Array<{ polygon: { vertices: number[][] }; depth: number }>;
-    
-    // Sort by depth (far to near)
-    polygonsWithDepth.sort((a, b) => b.depth - a.depth);
-    
-    // Use even-odd fill rule
-    ctx.fillStyle = "rgba(99, 102, 241, 0.5)";
-    ctx.strokeStyle = "#818cf8";
-    ctx.lineWidth = 0.5;
-    
-    for (const { polygon } of polygonsWithDepth) {
-      ctx.beginPath();
-      const first = project(
-        polygon.vertices[0][0],
-        polygon.vertices[0][1],
-        polygon.vertices[0][2]
-      );
-      ctx.moveTo(first.x, first.y);
-
-      for (let i = 1; i < polygon.vertices.length; i++) {
-        const p = project(
-          polygon.vertices[i][0],
-          polygon.vertices[i][1],
-          polygon.vertices[i][2]
-        );
-        ctx.lineTo(p.x, p.y);
-      }
-      ctx.closePath();
-      ctx.fill("evenodd");
-      ctx.stroke();
-    }
+  
+  if (!g.polygons || !Array.isArray(g.polygons)) {
+    return null;
   }
-
-  // geom2 format: has sides array
-  if (g.sides && Array.isArray(g.sides)) {
-    for (const side of g.sides as number[][][]) {
-      if (side.length >= 2) {
-        ctx.beginPath();
-        const start = project(side[0][0], side[0][1], 0);
-        const end = project(side[1][0], side[1][1], 0);
-        ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x, end.y);
-        ctx.stroke();
-      }
+  
+  const polygons = g.polygons as Array<{ vertices: number[][] }>;
+  const vertices: number[] = [];
+  const indices: number[] = [];
+  let vertexIndex = 0;
+  
+  for (const polygon of polygons) {
+    if (!polygon.vertices || polygon.vertices.length < 3) continue;
+    
+    // Triangulate polygon using fan triangulation
+    const baseIndex = vertexIndex;
+    
+    for (const v of polygon.vertices) {
+      vertices.push(v[0], v[1], v[2]);
     }
-  }
-
-  // If no recognized format, render a placeholder cube
-  if (!g.polygons && !g.sides) {
-    const size = 20;
-    const vertices = [
-      [-size, -size, -size],
-      [size, -size, -size],
-      [size, size, -size],
-      [-size, size, -size],
-      [-size, -size, size],
-      [size, -size, size],
-      [size, size, size],
-      [-size, size, size],
-    ];
-    const edges = [
-      [0, 1], [1, 2], [2, 3], [3, 0],
-      [4, 5], [5, 6], [6, 7], [7, 4],
-      [0, 4], [1, 5], [2, 6], [3, 7],
-    ];
-
-    ctx.strokeStyle = "#818cf850";
-    for (const [a, b] of edges) {
-      const pa = project(vertices[a][0], vertices[a][1], vertices[a][2]);
-      const pb = project(vertices[b][0], vertices[b][1], vertices[b][2]);
-      ctx.beginPath();
-      ctx.moveTo(pa.x, pa.y);
-      ctx.lineTo(pb.x, pb.y);
-      ctx.stroke();
+    
+    // Create triangles from the polygon fan
+    for (let i = 1; i < polygon.vertices.length - 1; i++) {
+      indices.push(baseIndex, baseIndex + i, baseIndex + i + 1);
     }
+    
+    vertexIndex += polygon.vertices.length;
   }
+  
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  
+  return geometry;
 }
 
-/**
- * 3D viewport that renders JSCAD geometries using a canvas.
- * Uses a simple wireframe renderer as a fallback since @jscad/regl-renderer
- * has complex setup requirements.
- */
 export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geometry, isGenerating, className = "" }, ref) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const meshGroupRef = useRef<THREE.Group | null>(null);
   const [rotation, setRotation] = useState({ x: -30, y: 45 });
   const [isDragging, setIsDragging] = useState(false);
   const lastPos = useRef({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(5);
+  const [zoom, setZoom] = useState(50);
 
   useImperativeHandle(ref, () => ({
     rotate: (dx, dy) => {
       setRotation((r) => ({ x: r.x + dx, y: r.y + dy }));
     },
-    zoomIn: () => setZoom((z) => Math.min(50, z * 1.2)),
-    zoomOut: () => setZoom((z) => Math.max(2.5, z / 1.2)),
+    zoomIn: () => setZoom((z) => Math.min(300, z * 1.2)),
+    zoomOut: () => setZoom((z) => Math.max(5, z / 1.2)),
     reset: () => {
       setRotation({ x: -30, y: 45 });
-      setZoom(1);
+      setZoom(50);
     },
   }));
 
-  const render = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // Initialize Three.js scene
+  useEffect(() => {
+    if (!containerRef.current) return;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const container = containerRef.current;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
 
-    const w = canvas.width / window.devicePixelRatio;
-    const h = canvas.height / window.devicePixelRatio;
-    const cx = w / 2;
-    const cy = h / 2;
-    
-    // Clear
-    ctx.fillStyle = "#1e1e1e";
-    ctx.fillRect(0, 0, w, h);
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1e1e1e);
+    sceneRef.current = scene;
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
+    camera.position.set(0, 0, zoom);
+    cameraRef.current = camera;
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
 
     // Grid
-    const gridSize = 20 * zoom;
-    const gridCount = 20;
-    ctx.strokeStyle = "#2a2a3e";
-    ctx.lineWidth = 0.5;
+    const gridHelper = new THREE.GridHelper(400, 20, 0x2a2a3e, 0x2a2a3e);
+    gridHelper.renderOrder = 1000;
+    scene.add(gridHelper);
 
-    for (let i = -gridCount; i <= gridCount; i++) {
-      const offset = i * gridSize;
-      ctx.beginPath();
-      ctx.moveTo(cx + offset, 0);
-      ctx.lineTo(cx + offset, h);
-      ctx.stroke();
+    // Axes - render on top to avoid z-fighting
+    const axesHelper = new THREE.AxesHelper(60);
+    axesHelper.renderOrder = 1001;
+    axesHelper.material.depthTest = false;
+    scene.add(axesHelper);
 
-      ctx.beginPath();
-      ctx.moveTo(0, cy + offset);
-      ctx.lineTo(w, cy + offset);
-      ctx.stroke();
-    }
+    // Mesh group to hold all geometry
+    const meshGroup = new THREE.Group();
+    scene.add(meshGroup);
+    meshGroupRef.current = meshGroup;
 
-    // Axes
-    const axisLen = 60 * zoom;
+    // Animation loop
+    const animate = () => {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // Handle resize
+    const handleResize = () => {
+      if (!container || !camera || !renderer) return;
+      const newWidth = container.clientWidth;
+      const newHeight = container.clientHeight;
+      camera.aspect = newWidth / newHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(newWidth, newHeight);
+    };
+
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+      renderer.dispose();
+      container.removeChild(renderer.domElement);
+    };
+  }, []);
+
+  // Update camera position based on rotation and zoom
+  useEffect(() => {
+    if (!cameraRef.current) return;
+    
     const radX = (rotation.y * Math.PI) / 180;
     const radY = (rotation.x * Math.PI) / 180;
+    
+    const x = zoom * Math.sin(radX) * Math.cos(radY);
+    const y = zoom * Math.sin(radY);
+    const z = zoom * Math.cos(radX) * Math.cos(radY);
+    
+    cameraRef.current.position.set(x, y, z);
+    cameraRef.current.lookAt(0, 0, 0);
+  }, [rotation, zoom]);
 
-    // Simple 3D to 2D projection
-    const project = (x: number, y: number, z: number) => {
-      const cosX = Math.cos(radX);
-      const sinX = Math.sin(radX);
-      const cosY = Math.cos(radY);
-      const sinY = Math.sin(radY);
+  // Update geometry
+  useEffect(() => {
+    if (!meshGroupRef.current || !geometry) return;
 
-      const rx = x * cosX - y * sinX;
-      const ry = x * sinX * sinY + y * cosX * sinY + z * cosY;
-      const rz = x * sinX * cosY + y * cosX * cosY - z * sinY;
-
-      const scale = 2000 / (2000 + rz);
-      return {
-        x: cx + rx * scale * zoom,
-        y: cy - ry * scale * zoom,
-      };
-    };
-
-    // Draw X axis (red)
-    const xEnd = project(axisLen, 0, 0);
-    ctx.beginPath();
-    ctx.strokeStyle = "#ef4444";
-    ctx.lineWidth = 2;
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(xEnd.x, xEnd.y);
-    ctx.stroke();
-    ctx.fillStyle = "#ef4444";
-    ctx.font = "12px monospace";
-    ctx.fillText("X", xEnd.x + 5, xEnd.y);
-
-    // Draw Y axis (green)
-    const yEnd = project(0, axisLen, 0);
-    ctx.beginPath();
-    ctx.strokeStyle = "#22c55e";
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(yEnd.x, yEnd.y);
-    ctx.stroke();
-    ctx.fillStyle = "#22c55e";
-    ctx.fillText("Y", yEnd.x + 5, yEnd.y);
-
-    // Draw Z axis (blue)
-    const zEnd = project(0, 0, axisLen);
-    ctx.beginPath();
-    ctx.strokeStyle = "#3b82f6";
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(zEnd.x, zEnd.y);
-    ctx.stroke();
-    ctx.fillStyle = "#3b82f6";
-    ctx.fillText("Z", zEnd.x + 5, zEnd.y);
-
-    // Render geometries as wireframes
-    if (geometry && geometry.length > 0 && !isGenerating) {
-      ctx.strokeStyle = "#a5b4fc";  // Light indigo
-      ctx.lineWidth = 1;
-      ctx.fillStyle = "rgba(99, 102, 241, 0.3)";  // Semi-transparent indigo fill
-
-      for (const geom of geometry) {
-        renderGeometry(ctx, geom, project);
+    const group = meshGroupRef.current;
+    
+    // Clear existing meshes
+    while (group.children.length > 0) {
+      const child = group.children[0];
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material.dispose();
+        }
       }
+      group.remove(child);
     }
 
-    // Status text
-    ctx.fillStyle = "#6b7280";
-    ctx.font = "11px monospace";
-    const statusText = isGenerating 
-      ? "Generating..." 
-      : `${geometry?.length || 0} ${(geometry?.length || 0) === 1 ? "geometry" : "geometries"} | Drag to rotate | Scroll to zoom`;
-    ctx.fillText(statusText, 10, h - 10);
-  }, [geometry, isGenerating, rotation, zoom]);
+    if (isGenerating || !geometry.length) return;
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    for (const geom of geometry) {
+      const threeGeom = jscadToThreeGeometry(geom);
+      if (!threeGeom) continue;
 
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * window.devicePixelRatio;
-      canvas.height = rect.height * window.devicePixelRatio;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-      }
-      // We need to store the CSS dimensions
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
-      render();
-    };
+      // Create solid mesh (grey, slightly transparent)
+      const solidMaterial = new THREE.MeshPhongMaterial({
+        color: 0x808080,
+        opacity: 0.9,
+        transparent: true,
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(threeGeom, solidMaterial);
+      
+      // Create edges - only show edges where there's a significant angle change
+      const edges = new THREE.EdgesGeometry(threeGeom, 15); // threshold angle of 15 degrees
+      const lineMaterial = new THREE.LineBasicMaterial({ 
+        color: 0x000000,
+        depthTest: true,
+        depthWrite: true,
+      });
+      const lines = new THREE.LineSegments(edges, lineMaterial);
+      
+      // Add both to a parent object
+      const obj = new THREE.Group();
+      obj.add(mesh);
+      obj.add(lines);
+      
+      group.add(obj);
+    }
 
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
+    // Add lighting
+    if (sceneRef.current) {
+      // Remove old lights
+      const oldLights = sceneRef.current.children.filter(c => c instanceof THREE.Light);
+      oldLights.forEach(l => sceneRef.current!.remove(l));
+      
+      // Add new lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      sceneRef.current.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(10, 10, 10);
+      sceneRef.current.add(directionalLight);
+    }
+  }, [geometry, isGenerating]);
 
-    return () => observer.disconnect();
-  }, [render]);
-
-  useEffect(() => {
-    render();
-  }, [render]);
-
+  // Mouse interaction
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     lastPos.current = { x: e.clientX, y: e.clientY };
@@ -286,8 +240,8 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     const dx = e.clientX - lastPos.current.x;
     const dy = e.clientY - lastPos.current.y;
     setRotation((r) => ({
-      x: r.x + dy * 0.5,
-      y: r.y + dx * 0.5,
+      x: Math.max(-90, Math.min(90, r.x + dy * 0.5)),
+      y: r.y - dx * 0.5,
     }));
     lastPos.current = { x: e.clientX, y: e.clientY };
   };
@@ -296,22 +250,22 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
 
   const handleWheel = useCallback((event: WheelEvent) => {
     event.preventDefault();
-    setZoom((z) => Math.max(2.5, Math.min(50, z - event.deltaY * 0.001)));
+    setZoom((z) => Math.max(5, Math.min(300, z + event.deltaY * 0.01)));
   }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    container.addEventListener("wheel", handleWheel, { passive: false });
     return () => {
-      canvas.removeEventListener("wheel", handleWheel);
+      container.removeEventListener("wheel", handleWheel);
     };
   }, [handleWheel]);
 
   return (
-    <canvas
-      ref={canvasRef}
+    <div
+      ref={containerRef}
       className={`w-full h-full cursor-grab active:cursor-grabbing ${className}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
