@@ -48,7 +48,7 @@ export async function POST(req: Request) {
             {
               role: "system",
               content:
-                "You name projects from a user prompt. Return a short, concrete title (2-6 words), Title Case, no quotes, no markdown, max 60 characters.",
+                "You name projects from a user prompt. Suggest a short, concrete project name (2-6 words), Title Case, no quotes, no markdown, max 60 characters. Avoid starting with Make/Create/Build. Prefer noun phrases over full sentences. Do not repeat the prompt verbatim. Examples: prompt 'Make a gear' => 'Gears'; prompt 'Create a phone stand' => 'Phone Stand'.",
             },
             { role: "user", content: prompt },
           ],

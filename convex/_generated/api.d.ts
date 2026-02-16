@@ -10,7 +10,6 @@
 
 import type * as chat from "../chat.js";
 import type * as exports from "../exports.js";
-import type * as presence from "../presence.js";
 import type * as projects from "../projects.js";
 import type * as templates from "../templates.js";
 import type * as versions from "../versions.js";
@@ -24,7 +23,6 @@ import type {
 declare const fullApi: ApiFromModules<{
   chat: typeof chat;
   exports: typeof exports;
-  presence: typeof presence;
   projects: typeof projects;
   templates: typeof templates;
   versions: typeof versions;

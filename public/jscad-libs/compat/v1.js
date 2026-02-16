@@ -91,8 +91,9 @@ const cylinder = (options = {}) => {
   let radiusStart = options.r1 ?? options.d1 / 2 ?? options.r ?? options.d / 2;
   let radiusEnd = options.r2 ?? options.d2 / 2 ?? options.r ?? options.d / 2;
 
-  if (radiusStart === undefined) radiusStart = 1;
-  if (radiusEnd === undefined) radiusEnd = radiusStart;
+  // Ensure valid radius values (handle 0, undefined, NaN)
+  if (!radiusStart || typeof radiusStart !== 'number' || isNaN(radiusStart)) radiusStart = 1;
+  if (!radiusEnd || typeof radiusEnd !== 'number' || isNaN(radiusEnd)) radiusEnd = radiusStart;
 
   let geom;
   if (radiusStart === radiusEnd) {
@@ -256,6 +257,25 @@ const api = {
   rotate,
   scale,
   color,
+};
+
+// Helper to unwrap geometries before serialization (removes wrapper methods)
+api.unwrap = function(geometry) {
+  if (!geometry) return geometry;
+  if (Array.isArray(geometry)) {
+    return geometry.map(g => api.unwrap(g));
+  }
+  if (typeof geometry === 'object' && geometry.__v1Wrapped) {
+    // Create a clean copy without wrapper methods
+    const clean = {};
+    for (const key in geometry) {
+      if (key !== '__v1Wrapped' && typeof geometry[key] !== 'function') {
+        clean[key] = geometry[key];
+      }
+    }
+    return clean;
+  }
+  return geometry;
 };
 
 const target = typeof globalThis !== "undefined" ? globalThis : {};

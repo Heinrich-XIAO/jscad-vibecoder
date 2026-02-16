@@ -981,13 +981,14 @@ module.exports = { main, getParameterDefinitions }
 - Gears: use the provided library instead of hand-built teeth.
   - include('/jscad-libs/mechanics/gears.jscad') (loads v1 compat automatically).
   - Create gears with window.jscad.tspi.involuteGear(printerSettings, params).
-  - Return gear.getModel() from main.
+  - ALWAYS wrap the return value with unwrap(): return unwrap(gear.getModel()).
+  - The unwrap() function is provided by the v1 compat layer and strips non-serializable methods.
   - Minimal example (use param defaults and define params via getParameterDefinitions):
     include('/jscad-libs/mechanics/gears.jscad')
     function main(params) {
       const printerSettings = { scale: 1, correctionInsideDiameter: 0, correctionOutsideDiameter: 0, correctionInsideDiameterMoving: 0, correctionOutsideDiameterMoving: 0, resolutionCircle: 360 }
-      const gear = new window.jscad.tspi.involuteGear(printerSettings, { module: 2, teethNumber: 20, thickness: 6, centerholeRadius: 5 })
-      return gear.getModel()
+      const gear = new window.jscad.tspi.involuteGear(printerSettings, { module: 2, teethNumber: 20, thickness: 6, centerholeRadius: 5, pressureAngle: 20 })
+      return unwrap(gear.getModel())
     }
 
 Good write_code output (gear library):
@@ -1017,7 +1018,7 @@ function main(params) {
     thickness,
     centerholeRadius: centerhole,
   })
-  return gear.getModel()
+  return unwrap(gear.getModel())
 }
 module.exports = { main, getParameterDefinitions }
 \`\`\`

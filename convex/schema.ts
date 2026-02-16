@@ -73,13 +73,4 @@ export default defineSchema({
   })
     .index("by_category", ["category"]),
 
-  presence: defineTable({
-    projectId: v.id("projects"),
-    userId: v.string(),
-    userName: v.string(),
-    isEditing: v.boolean(),
-    lastSeen: v.number(),
-  })
-    .index("by_project", ["projectId"])
-    .index("by_user", ["userId"]),
 });

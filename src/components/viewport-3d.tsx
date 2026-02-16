@@ -124,14 +124,14 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
   const [rotation, setRotation] = useState({ x: -30, y: 45 });
   const [isDragging, setIsDragging] = useState(false);
   const lastPos = useRef({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(5);
 
   useImperativeHandle(ref, () => ({
     rotate: (dx, dy) => {
       setRotation((r) => ({ x: r.x + dx, y: r.y + dy }));
     },
-    zoomIn: () => setZoom((z) => Math.min(5, z * 1.2)),
-    zoomOut: () => setZoom((z) => Math.max(0.1, z / 1.2)),
+    zoomIn: () => setZoom((z) => Math.min(50, z * 1.2)),
+    zoomOut: () => setZoom((z) => Math.max(2.5, z / 1.2)),
     reset: () => {
       setRotation({ x: -30, y: 45 });
       setZoom(1);
@@ -189,7 +189,7 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
       const ry = x * sinX * sinY + y * cosX * sinY + z * cosY;
       const rz = x * sinX * cosY + y * cosX * cosY - z * sinY;
 
-      const scale = 200 / (200 + rz);
+      const scale = 2000 / (2000 + rz);
       return {
         x: cx + rx * scale * zoom,
         y: cy - ry * scale * zoom,
@@ -296,7 +296,7 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
 
   const handleWheel = useCallback((event: WheelEvent) => {
     event.preventDefault();
-    setZoom((z) => Math.max(0.1, Math.min(5, z - event.deltaY * 0.001)));
+    setZoom((z) => Math.max(2.5, Math.min(50, z - event.deltaY * 0.001)));
   }, []);
 
   useEffect(() => {

@@ -1,2 +1,166 @@
 require('/jscad-libs/compat/v1.js');
-include('https://raw.githubusercontent.com/tspspi/jscadModels/master/library/mechanics/gears.jscad');
+
+(function() {
+if(typeof window.jscad !== 'object') { window.jscad = new Object(); }
+if(typeof window.jscad.tspi !== 'object') { window.jscad.tspi = new Object(); }
+
+window.jscad.tspi.involuteGear = function(printer, params) {
+	knownParameters = [
+		{ name: 'teethNumber',			type: 'number',					default: -1				},
+		{ name: 'module',				type: 'number',					default: 1				},
+		{ name: 'pressureAngle',		type: 'number',					default: 20				},
+		{ name: 'clearance',			type: 'number',					default: 0				},
+		{ name: 'thickness',			type: 'number',					default: -1				},
+		{ name: 'centerholeRadius',		type: 'number',					default: 0				},
+		{ name: 'resolution',			type: 'number',					default: 5				},
+		{ name: 'inclination',			type: 'number',					default: 0				},
+		{ name: 'inclinationSteps',		type: 'number',					default: 25				},
+		{ name: 'doubleHelical',		type: 'boolean',				default: false			},
+	];
+
+	knownPrinterParameters = [
+		{ name: 'scale', 						type: 'number', 	default: 1 		},
+		{ name: 'correctionInsideDiameter', 	type: 'number', 	default: 0 		},
+		{ name: 'correctionOutsideDiameter', 	type: 'number', 	default: 0 		},
+		{ name: 'resolutionCircle', 			type: 'number', 	default: 360 	},
+	];
+
+	this.parameters = { };
+	this.printer = { };
+	this.error = false;
+
+	for(var i = 0; i < knownParameters.length; i++) {
+		if(typeof(params[knownParameters[i].name]) === knownParameters[i].type) {
+			this.parameters[knownParameters[i].name] = params[knownParameters[i].name];
+		} else if(knownParameters[i].default != -1) {
+			this.parameters[knownParameters[i].name] = knownParameters[i].default;
+		} else {
+			this.error = false;
+		}
+	}
+	for(i = 0; i < knownPrinterParameters.length; i++) {
+		if(typeof(printer[knownPrinterParameters[i].name]) === knownPrinterParameters[i].type) {
+			this.printer[knownPrinterParameters[i].name] = printer[knownPrinterParameters[i].name];
+		} else if(knownPrinterParameters[i].default != -1) {
+			this.printer[knownPrinterParameters[i].name] = knownPrinterParameters[i].default;
+		} else {
+			this.error = false;
+		}
+	}
+
+	this.resolution					= this.parameters['resolution'];
+	this.thickness					= this.parameters['thickness'];
+	this.inclination				= this.parameters['inclination'];
+	this.inclinationSteps			= this.parameters['inclinationSteps'];
+
+	this.module						= this.parameters['module'];
+	this.circularPitch				= this.module * Math.PI;
+	this.pressureAngle				= this.parameters['pressureAngle'];
+	this.teethNumber				= this.parameters['teethNumber'];
+	this.clearance					= this.parameters['clearance'];
+
+	this.centerholeRadius			= this.parameters['centerholeRadius'] + (this.printer['correctionInsideDiameter'] / 2.0);
+	this.doubleHelical				= this.parameters['doubleHelical'];
+
+	this.pitchDiameter				= this.teethNumber / this.circularPitch;
+	this.pitchRadius				= this.pitchDiameter / 2.0;
+	this.baseCircleDiameter			= this.pitchDiameter * Math.cos(this.pressureAngle * Math.PI/180.0);
+	this.baseCircleRadius			= this.baseCircleDiameter / 2.0;
+	this.addendum					= 1.0 / this.circularPitch;
+	this.dedendum					= this.addendum - this.clearance;
+	this.outsideDiameter			= this.pitchDiameter + 2*this.addendum;
+	this.outsideRadius				= this.outsideDiameter / 2.0;
+	this.rootDiameter				= this.pitchDiameter - 2*this.dedendum;
+	this.rootRadius					= this.rootDiameter / 2.0;
+	
+	this.getModel = function() {
+		var maxTangentLength = Math.sqrt(this.outsideRadius*this.outsideRadius - this.baseCircleRadius*this.baseCircleRadius);
+		var maxAngle = maxTangentLength / this.baseCircleRadius;
+
+		if(this.doubleHelical) {
+			this.thickness = this.thickness/2;
+		}
+		
+		var angle;
+		var currentAngle;
+		var currentTangentLength;
+		var radialVector;
+		var tangentialVector;
+		var point;
+
+		var points = [ ];
+		points.push(new CSG.Vector2D(0,0));
+
+		for(var i = 0; i <= this.resolution; i++) {
+			currentAngle = maxAngle * i / this.resolution;
+			currentTangentLength = currentAngle * this.baseCircleRadius;
+
+			radialVector = CSG.Vector2D.fromAngle(currentAngle);
+			tangentialVector = radialVector.normal();
+			point = radialVector.times(this.baseCircleRadius).plus(tangentialVector.times(currentTangentLength));
+
+			points.push(point);
+		}
+
+		var tangentAtPitchCircle = Math.sqrt(this.pitchRadius*this.pitchRadius - this.baseCircleRadius*this.baseCircleRadius);
+		var angleAtPitchCircle = tangentAtPitchCircle / this.baseCircleRadius;
+		var angularDifference = angleAtPitchCircle - Math.atan(angleAtPitchCircle);
+		var angularToothWidthBase = Math.PI / this.teethNumber + 2 * angularDifference;
+
+		for(i = this.resolution; i >= 0; i--) {
+			currentAngle = maxAngle * i / this.resolution;
+			currentTangentLength = currentAngle * this.baseCircleRadius;
+
+			radialVector = CSG.Vector2D.fromAngle(angularToothWidthBase - currentAngle);
+			tangentialVector = radialVector.normal().negated();
+			point = radialVector.times(this.baseCircleRadius).plus(tangentialVector.times(currentTangentLength));
+			points.push(point);
+        }
+
+		var singleTooth;
+
+		if(this.inclination != 0) {
+			var twistAngle = this.thickness * Math.tan(this.inclination * Math.PI/180.0) * 180 / (this.pitchRadius * Math.PI);
+			singleTooth = (new CSG.Polygon2D(points)).extrude({ offset: [0, 0, this.thickness], twistangle: twistAngle, twiststeps: this.inclinationSteps});
+		} else {
+			singleTooth = (new CSG.Polygon2D(points)).extrude({ offset: [0, 0, this.thickness]});
+		}
+
+		var teeth = new CSG();
+		for(i = 0; i < this.teethNumber; i++) {
+			angle = i * 360 / this.teethNumber;
+			teeth = teeth.unionForNonIntersecting(singleTooth.rotateZ(angle));
+		}
+
+		points = [];
+		var toothAngle = 2 * Math.PI / this.teethNumber;
+		var toothCenterAngle = 0.5 * angularToothWidthBase;
+		for(i = 0; i < this.teethNumber; i++) {
+			angle = toothCenterAngle + i * toothAngle;
+			points.push(CSG.Vector2D.fromAngle(angle).times(this.rootRadius));
+		}
+		var rootcircle = new CSG.Polygon2D(points).extrude({offset: [0, 0, this.thickness]});
+
+		var gear = rootcircle.union(teeth);
+		var result;
+		if(this.centerholeRadius > 0) {
+			result = difference(
+				gear.translate([0,0,-this.thickness/2.0]),
+				cylinder({ r : this.centerholeRadius, h : 3*this.thickness, center: true })
+			);
+		} else {
+			result = gear.translate([0,0,-this.thickness/2.0]);
+		}
+
+		if(this.doubleHelical) {
+			result = result.translate([0,0, this.thickness/2]);
+			result = union(
+				result,
+				result.mirroredZ()
+			);
+			this.thickness = this.thickness*2;
+		}
+		return result.rotateZ(-360 / (4 * this.teethNumber));
+	};
+}
+})();

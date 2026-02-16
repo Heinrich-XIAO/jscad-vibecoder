@@ -15,7 +15,6 @@ import { ExportDialog } from "@/components/export-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { GeometryInfo } from "@/components/geometry-info";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
-import { CollaborationIndicator } from "@/components/collaboration-indicator";
 import { extractParameters, type ExtractedParameter } from "@/lib/parameter-extractor";
 import { useJscadWorker } from "@/lib/jscad-worker";
 import { useKeyboardShortcuts, type KeyboardShortcut } from "@/lib/use-keyboard-shortcuts";
@@ -217,6 +216,24 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const handleParameterChange = (name: string, value: number | boolean | string) => {
     setParameters((prev) => ({ ...prev, [name]: value }));
   };
+
+  const handleResetParameters = useCallback(() => {
+    const defaults: ParameterValues = {};
+    parameterDefs.forEach((def) => {
+      defaults[def.name] = (def.initial ?? def.value) as number | boolean | string;
+    });
+    setParameters(defaults);
+  }, [parameterDefs]);
+
+  const handleResetParameter = useCallback((name: string) => {
+    const def = parameterDefs.find((d) => d.name === name);
+    if (def) {
+      setParameters((prev) => ({
+        ...prev,
+        [name]: (def.initial ?? def.value) as number | boolean | string,
+      }));
+    }
+  }, [parameterDefs]);
 
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
@@ -459,7 +476,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               <p className="text-xs text-muted-foreground">
                 {versions?.length || 0} versions
               </p>
-              {projectId && <CollaborationIndicator projectId={projectId} />}
             </div>
           </div>
         </div>
@@ -583,14 +599,24 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
           {parameterDefs.length > 0 && (
             <div className="border-t border-border p-4 max-h-48 overflow-y-auto">
-              <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                <Code className="w-4 h-4" />
-                Parameters
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <Code className="w-4 h-4" />
+                  Parameters
+                </h3>
+                <button
+                  onClick={handleResetParameters}
+                  className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+                  title="Reset to defaults"
+                >
+                  Reset
+                </button>
+              </div>
               <ParameterSliders
                 parameters={parameterDefs}
                 values={parameters}
                 onChange={handleParameterChange}
+                onReset={handleResetParameter}
                 ref={parametersRef}
               />
             </div>

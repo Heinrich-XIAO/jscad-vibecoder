@@ -13,6 +13,7 @@ import {
   MessageSquare,
   CheckCircle2,
   RefreshCw,
+  Copy,
 } from "lucide-react";
 import { getOpenRouterSettings } from "@/lib/openrouter";
 import { api } from "@/convex/_generated/api";
@@ -400,11 +401,9 @@ export function ChatPanel({
     if (!hasUserMessages && canAutoName) {
       let derivedName = deriveProjectName(prompt);
       const settings = getOpenRouterSettings();
-      if (settings.apiKey) {
-        const suggestedName = await requestProjectTitle(prompt, settings.apiKey);
-        if (suggestedName) {
-          derivedName = suggestedName;
-        }
+      const suggestedName = await requestProjectTitle(prompt, settings.apiKey);
+      if (suggestedName) {
+        derivedName = suggestedName;
       }
       if (
         derivedName &&
@@ -647,15 +646,43 @@ function ToolCallsDisplay({
   }>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyAll = useCallback(async () => {
+    const payload = JSON.stringify(toolCalls, null, 2);
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  }, [toolCalls]);
 
   return (
-    <div className="mt-2">
+    <div className="mt-2 relative">
+      <div className="flex items-center gap-3 pr-6">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+          type="button"
+        >
+          {expanded ? "Hide" : "Show"} {toolCalls.length} tool call
+          {toolCalls.length !== 1 ? "s" : ""}
+        </button>
+      </div>
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="text-xs text-emerald-400 hover:text-emerald-300 underline"
+        onClick={handleCopyAll}
+        className={
+          copied
+            ? "absolute right-0 top-0 text-emerald-400"
+            : "absolute right-0 top-0 text-zinc-400 hover:text-zinc-200"
+        }
+        aria-label={copied ? "Copied tool calls" : "Copy tool calls"}
+        title={copied ? "Copied" : "Copy all tool calls"}
+        type="button"
       >
-        {expanded ? "Hide" : "Show"} {toolCalls.length} tool call
-        {toolCalls.length !== 1 ? "s" : ""}
+        <Copy className="w-3.5 h-3.5" />
       </button>
 
       {expanded && (

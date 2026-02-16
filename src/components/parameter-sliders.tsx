@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, forwardRef, useImperativeHandle, useEffect } from "react";
+import { RotateCcw } from "lucide-react";
 import type { ExtractedParameter } from "@/lib/parameter-extractor";
 
 export interface ParameterSlidersHandle {
@@ -11,6 +12,7 @@ interface ParameterSlidersProps {
   parameters: ExtractedParameter[];
   values: Record<string, number | boolean | string>;
   onChange: (name: string, value: number | boolean | string) => void;
+  onReset?: (name: string) => void;
   className?: string;
 }
 
@@ -18,6 +20,7 @@ export const ParameterSliders = forwardRef<ParameterSlidersHandle, ParameterSlid
   parameters,
   values,
   onChange,
+  onReset,
   className = "",
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,6 +42,7 @@ export const ParameterSliders = forwardRef<ParameterSlidersHandle, ParameterSlid
           parameter={param}
           value={values[param.name] !== undefined ? values[param.name] : param.value}
           onChange={(value) => onChange(param.name, value as number | boolean | string)}
+          onReset={onReset ? () => onReset(param.name) : undefined}
         />
       ))}
     </div>
@@ -51,12 +55,21 @@ function ParameterControl({
   parameter,
   value,
   onChange,
+  onReset,
 }: {
   parameter: ExtractedParameter;
   value: unknown;
   onChange: (value: unknown) => void;
+  onReset?: () => void;
 }) {
   const [localValue, setLocalValue] = useState(value);
+
+  // Sync local state with external value changes (e.g., reset)
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const isDefault = localValue === (parameter.initial ?? parameter.value);
 
   const handleChange = (newValue: unknown) => {
     setLocalValue(newValue);
@@ -65,7 +78,7 @@ function ParameterControl({
 
   if (parameter.type === "number") {
     return (
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <label className="text-xs text-zinc-400 min-w-[80px] truncate">
           {parameter.label}
         </label>
@@ -85,15 +98,24 @@ function ParameterControl({
           max={parameter.max}
           step={parameter.step}
           onChange={(e) => handleChange(parseFloat(e.target.value))}
-          className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 text-right"
+          className="w-14 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 text-right"
         />
+        {onReset && !isDefault && (
+          <button
+            onClick={onReset}
+            className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+            title="Reset to default"
+          >
+            <RotateCcw className="w-3 h-3" />
+          </button>
+        )}
       </div>
     );
   }
 
   if (parameter.type === "boolean") {
     return (
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <label className="text-xs text-zinc-400 min-w-[80px] truncate">
           {parameter.label}
         </label>
@@ -103,13 +125,22 @@ function ParameterControl({
           onChange={(e) => handleChange(e.target.checked)}
           className="accent-indigo-500"
         />
+        {onReset && !isDefault && (
+          <button
+            onClick={onReset}
+            className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors ml-auto"
+            title="Reset to default"
+          >
+            <RotateCcw className="w-3 h-3" />
+          </button>
+        )}
       </div>
     );
   }
 
   if (parameter.type === "text") {
     return (
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <label className="text-xs text-zinc-400 min-w-[80px] truncate">
           {parameter.label}
         </label>
@@ -119,6 +150,15 @@ function ParameterControl({
           onChange={(e) => handleChange(e.target.value)}
           className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300"
         />
+        {onReset && !isDefault && (
+          <button
+            onClick={onReset}
+            className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+            title="Reset to default"
+          >
+            <RotateCcw className="w-3 h-3" />
+          </button>
+        )}
       </div>
     );
   }
