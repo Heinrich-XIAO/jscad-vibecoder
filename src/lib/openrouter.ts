@@ -9,7 +9,7 @@ export interface OpenRouterSettings {
   temperature: number;
 }
 
-const STORAGE_KEY = "jscad-vibe-openrouter";
+const STORAGE_KEY = "openmech-openrouter";
 
 const DEFAULT_SETTINGS: OpenRouterSettings = {
   apiKey: "",

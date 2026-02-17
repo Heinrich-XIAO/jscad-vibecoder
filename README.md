@@ -64,7 +64,7 @@ AI-powered parametric 3D modeling with JSCAD. A Next.js + Convex + tRPC applicat
 
 ### 1. Install Dependencies
 ```bash
-cd /Users/heinrich/Documents/3dai
+cd /Users/heinrich/Documents/openmech
 bun install
 ```
 

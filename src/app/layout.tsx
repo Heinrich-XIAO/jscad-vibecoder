@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JSCAD Vibecoder",
-  description: "AI-powered parametric 3D modeling with JSCAD",
+  title: "OpenMech",
+  description: "AI-powered parametric 3D modeling",
 };
 
 export default function RootLayout({

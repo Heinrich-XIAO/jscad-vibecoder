@@ -12,7 +12,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-const STORAGE_KEY = "jscad-vibe-theme";
+const STORAGE_KEY = "openmech-theme";
 
 function getSystemTheme(): "dark" | "light" {
   if (typeof window === "undefined") return "dark";

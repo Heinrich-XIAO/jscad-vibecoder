@@ -39,8 +39,8 @@ export async function POST(req: Request) {
         headers: {
           Authorization: `Bearer ${apiKey || process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://jscad-vibe.app",
-          "X-Title": "JSCAD Vibe",
+          "HTTP-Referer": "https://openmech.app",
+          "X-Title": "OpenMech",
         },
         body: JSON.stringify({
           model: TITLE_MODEL,

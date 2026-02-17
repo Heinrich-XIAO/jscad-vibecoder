@@ -39,7 +39,7 @@ function serializeOBJ(geometries: unknown[]): string {
     }
   }
 
-  let obj = "# JSCAD Vibecoder OBJ Export\n";
+  let obj = "# OpenMech OBJ Export\n";
   obj += "# Vertices\n";
   
   for (const v of vertices) {

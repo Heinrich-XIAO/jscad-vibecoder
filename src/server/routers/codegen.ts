@@ -399,8 +399,8 @@ async function callOpenRouter(params: {
       headers: {
         Authorization: `Bearer ${params.apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://jscad-vibe.app",
-        "X-Title": "JSCAD Vibe",
+        "HTTP-Referer": "https://openmech.app",
+        "X-Title": "OpenMech",
       },
       body: JSON.stringify({
         model: params.model,
@@ -441,8 +441,8 @@ async function callOpenRouterStream(
       headers: {
         Authorization: `Bearer ${params.apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://jscad-vibe.app",
-        "X-Title": "JSCAD Vibe",
+        "HTTP-Referer": "https://openmech.app",
+        "X-Title": "OpenMech",
       },
       body: JSON.stringify({
         model: params.model,
