@@ -217,10 +217,10 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
         const axisLength = 60;
 
         // X axis - pure red (255,0,0)
-        const xMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2 });
-        const xGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(axisLength, 0.01, 0)]);
-        const xLine = new THREE.Line(xGeom, xMat);
-        customAxes.add(xLine);
+const xMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+const xGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(axisLength, 0.01, 0)]);
+const xLine = new THREE.Line(xGeom, xMat);
+customAxes.add(xLine);
         // X axis arrowhead (cone pointing +X)
         const coneRadius = 0.6;
         const coneHeight = 1.4;
@@ -233,10 +233,10 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
         customAxes.add(xCone);
 
         // Y axis - pure green (0,255,0)
-        const yMat = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 });
-        const yGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(0, axisLength, 0)]);
-        const yLine = new THREE.Line(yGeom, yMat);
-        customAxes.add(yLine);
+const yMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+const yGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(0, axisLength, 0)]);
+const yLine = new THREE.Line(yGeom, yMat);
+customAxes.add(yLine);
         // Y axis arrowhead (cone pointing +Y)
         const yConeGeom = new THREE.ConeGeometry(coneRadius, coneHeight, coneSegments);
         const yConeMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
@@ -245,10 +245,10 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
         customAxes.add(yCone);
 
         // Z axis - pure blue (0,0,255)
-        const zMat = new THREE.LineBasicMaterial({ color: 0x0000ff, linewidth: 2 });
-        const zGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(0, 0.01, axisLength)]);
-        const zLine = new THREE.Line(zGeom, zMat);
-        customAxes.add(zLine);
+const zMat = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+const zGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(0, 0.01, axisLength)]);
+const zLine = new THREE.Line(zGeom, zMat);
+customAxes.add(zLine);
         // Z axis arrowhead (cone pointing +Z)
         const zConeGeom = new THREE.ConeGeometry(coneRadius, coneHeight, coneSegments);
         const zConeMat = new THREE.MeshBasicMaterial({ color: 0x0000ff });
