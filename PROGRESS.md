@@ -18,6 +18,7 @@
 - ✅ **Dashboard Date/Time Fallback** - Project cards now display a timestamp and use Convex `_creationTime` when `updatedAt` is missing
 - ✅ **Theme Context Stability** - `ThemeProvider` now always provides context during initial mount, preventing `useTheme` runtime crashes
 - ✅ **Clerk Authentication** - Clerk protects the dashboard and editors via `/sign-in`
+- ✅ **Signed-Out Home Landing** - Root route now shows a compact home page with Login + Getting Started CTAs, while signed-in users go directly to the dashboard
 
 ### Core 3D Modeling Features
 - ✅ **OBJ Export Support** - Full OBJ format export with vertex and face serialization
