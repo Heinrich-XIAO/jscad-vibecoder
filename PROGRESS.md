@@ -12,6 +12,7 @@
 - ✅ **Build System Working** - Next.js 16 builds successfully
 - ✅ **Convex Configuration** - Backend schema and functions ready
 - ✅ **Deploy Script Order** - `deploy.sh` now runs `convex deploy` only after successful production Vercel deploys
+- ✅ **Vercel Build Hook** - Vercel now runs `scripts/vercel-build.sh`, which triggers `convex deploy` only for production builds
 - ✅ **Environment Setup** - .env.local template with proper documentation
 - ✅ **Error Boundaries** - Graceful error handling with user-friendly crash pages
 - ✅ **3D Viewer Scroll Lock** - Wheel zoom no longer scrolls the page
