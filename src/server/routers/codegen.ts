@@ -15,7 +15,7 @@ export const generateInputSchema = z.object({
     })
     .optional(),
   openRouterApiKey: z.string().optional(),
-  model: z.string().default("z-ai/glm-4.7"),
+  model: z.string().default("z-ai/glm-5"),
   maxIterations: z.number().default(5),
 });
 
