@@ -17,6 +17,7 @@
 - ✅ **Full-Height Layout** - Page and side panels reach the bottom edge
 - ✅ **Dashboard Date/Time Fallback** - Project cards now display a timestamp and use Convex `_creationTime` when `updatedAt` is missing
 - ✅ **Theme Context Stability** - `ThemeProvider` now always provides context during initial mount, preventing `useTheme` runtime crashes
+- ✅ **Clerk Authentication** - Clerk protects the dashboard and editors via `/sign-in`
 
 ### Core 3D Modeling Features
 - ✅ **OBJ Export Support** - Full OBJ format export with vertex and face serialization

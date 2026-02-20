@@ -19,6 +19,7 @@ import { extractParameters, type ExtractedParameter } from "@/lib/parameter-extr
 import { useJscadWorker } from "@/lib/jscad-worker";
 import { useKeyboardShortcuts, type KeyboardShortcut } from "@/lib/use-keyboard-shortcuts";
 import { useUndoRedo } from "@/lib/use-undo-redo";
+import { useAuth } from "@clerk/nextjs";
 
 interface ParameterValues {
   [key: string]: number | boolean | string;
@@ -30,15 +31,17 @@ interface ProjectPageProps {
 
 export default function ProjectPage({ id }: ProjectPageProps) {
   const router = useRouter();
-  
-  const queryArgs = useMemo(() => {
-    if (!id) return "skip";
-    return { id: id as Id<"projects"> };
-  }, [id]);
+  const { userId } = useAuth();
 
-  const projectId = queryArgs === "skip" ? null : queryArgs.id;
-  const project = useQuery(api.projects.get, queryArgs);
-  const versions = useQuery(api.versions.list, queryArgs === "skip" ? "skip" : { projectId: queryArgs.id });
+  const projectQueryArgs = useMemo(() => {
+    if (!id || !userId) return "skip";
+    return { id: id as Id<"projects">, ownerId: userId };
+  }, [id, userId]);
+
+  const projectId = projectQueryArgs === "skip" ? null : projectQueryArgs.id;
+  const versionsArgs = projectQueryArgs === "skip" ? "skip" : { projectId: projectQueryArgs.id, ownerId: projectQueryArgs.ownerId };
+  const project = useQuery(api.projects.get, projectQueryArgs);
+  const versions = useQuery(api.versions.list, versionsArgs);
   const createVersion = useMutation(api.versions.create);
   const saveDraft = useMutation(api.versions.saveDraft);
 
@@ -132,7 +135,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [executeCode]);
 
   const handleSaveVersion = useCallback(async () => {
-    if (!code || !projectId) return;
+    if (!code || !projectId || !userId) return;
     
     try {
       const versionId = await createVersion({
@@ -140,13 +143,14 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         jscadCode: code,
         source: "manual",
         isValid: true,
+        ownerId: userId,
       });
       setCurrentVersionId(versionId);
       lastPersistedCodeRef.current = code;
     } catch (err) {
       console.error("Failed to save version:", err);
     }
-  }, [code, createVersion, projectId]);
+  }, [code, createVersion, projectId, userId]);
 
   const getActiveVersionId = useCallback(() => {
     if (currentVersionId) return currentVersionId as Id<"versions">;
@@ -155,7 +159,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [currentVersionId, project]);
 
   const autosaveDraft = useCallback(async () => {
-    if (!code) return;
+    if (!code || !userId) return;
 
     if (code === lastPersistedCodeRef.current) {
       return;
@@ -170,12 +174,13 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       await saveDraft({
         id: activeVersionId,
         jscadCode: code,
+        ownerId: userId,
       });
       lastPersistedCodeRef.current = code;
     } catch (err) {
       console.error("Failed to autosave draft:", err);
     }
-  }, [code, getActiveVersionId, saveDraft]);
+  }, [code, getActiveVersionId, saveDraft, userId]);
 
   const scheduleAutosaveDraft = useCallback((delayMs: number) => {
     if (autosaveTimeoutRef.current) {
@@ -558,7 +563,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {showChat && projectId && (
+        {showChat && projectId && userId && (
           <div className="w-80 border-r border-border flex flex-col bg-card">
             <ChatPanel
               projectId={projectId}
@@ -567,6 +572,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               onCodeChange={handleCodeChange}
               onPromptComplete={handlePromptComplete}
               inputRef={chatInputRef}
+              ownerId={userId}
             />
           </div>
         )}

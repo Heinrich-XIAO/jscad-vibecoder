@@ -91,14 +91,25 @@ This will:
    OPENROUTER_API_KEY=your-key-here
    ```
 
-### 4. Run Development Server
+### 4. Configure Clerk (Authentication)
+
+1. Create a Clerk account at https://clerk.com, add a new application, and note the publishable key + secret key.
+2. Set the following values in `.env.local` (copy the placeholders already there):
+   ```text
+   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk.clerk.your-publishable-key
+   CLERK_SECRET_KEY=sk.clerk.your-secret-key
+   ```
+3. Restart the dev server so Clerk can read the new environment variables and protect every page.
+4. When the middleware is active, unauthenticated visitors are redirected to `/sign-in`, where the Clerk `<SignIn>` component is rendered.
+
+### 5. Run Development Server
 ```bash
 bun run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
 
-### 5. Seed Starter Templates (Optional)
+### 6. Seed Starter Templates (Optional)
 
 After Convex is set up, you can seed the default templates:
 ```bash
@@ -107,12 +118,13 @@ npx convex run templates:seed
 
 ## Usage
 
-1. **Create a Project**: Click "New Project" on the dashboard
-2. **Chat with AI**: Describe what you want to build in natural language
-3. **Edit Code**: The Monaco editor shows the JSCAD code - edit directly or via AI
-4. **Adjust Parameters**: Use the sliders to tweak dimensions
-5. **Save Versions**: Click "Save" to create version checkpoints
-6. **Export**: Export as STL for 3D printing
+1. **Authenticate**: Sign in at `/sign-in` (Clerk protects every route) before accessing the dashboard
+2. **Create a Project**: Click "New Project" on the dashboard
+3. **Chat with AI**: Describe what you want to build in natural language
+4. **Edit Code**: The Monaco editor shows the JSCAD code - edit directly or via AI
+5. **Adjust Parameters**: Use the sliders to tweak dimensions
+6. **Save Versions**: Click "Save" to create version checkpoints
+7. **Export**: Export as STL for 3D printing
 
 ## JSCAD Code Format
 

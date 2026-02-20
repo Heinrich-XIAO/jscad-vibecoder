@@ -5,6 +5,7 @@ import { ConvexClientProvider } from "@/lib/convex-provider";
 import { TRPCProvider } from "@/lib/trpc-provider";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { ClerkProvider } from "@clerk/nextjs";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,20 +28,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <ThemeProvider>
-          <ErrorBoundary>
-            <ConvexClientProvider>
-              <TRPCProvider>
-                {children}
-              </TRPCProvider>
-            </ConvexClientProvider>
-          </ErrorBoundary>
-        </ThemeProvider>
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en" className="dark">
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        >
+          <ThemeProvider>
+            <ErrorBoundary>
+              <ConvexClientProvider>
+                <TRPCProvider>
+                  {children}
+                </TRPCProvider>
+              </ConvexClientProvider>
+            </ErrorBoundary>
+          </ThemeProvider>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

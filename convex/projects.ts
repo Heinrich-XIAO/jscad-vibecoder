@@ -6,24 +6,35 @@ export const list = query({
     status: v.optional(
       v.union(v.literal("draft"), v.literal("active"), v.literal("archived"))
     ),
+    ownerId: v.string(),
   },
   handler: async (ctx, args) => {
     if (args.status) {
       return await ctx.db
         .query("projects")
-        .withIndex("by_status", (q) => q.eq("status", args.status!))
+        .withIndex("by_owner_status", (q) => 
+          q.eq("ownerId", args.ownerId).eq("status", args.status!)
+        )
         .order("desc")
         .collect();
     }
-    return await ctx.db.query("projects").order("desc").collect();
+    return await ctx.db
+      .query("projects")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId))
+      .order("desc")
+      .collect();
   },
 });
 
 export const get = query({
-  args: { id: v.id("projects") },
+  args: { id: v.id("projects"), ownerId: v.string() },
   handler: async (ctx, args) => {
     const project = await ctx.db.get(args.id);
     if (!project) return null;
+    
+    if (project.ownerId !== args.ownerId) {
+      return null;
+    }
 
     let currentVersion = null;
     if (project.currentVersionId) {
@@ -40,6 +51,7 @@ export const create = mutation({
     description: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     templateId: v.optional(v.id("templates")),
+    ownerId: v.string(),
   },
   handler: async (ctx, args) => {
     let initialCode = `const { cuboid } = require('@jscad/modeling').primitives
@@ -63,6 +75,7 @@ module.exports = { main }
       description: args.description,
       tags: args.tags ?? [],
       status: "active",
+      ownerId: args.ownerId,
     });
 
     const versionId = await ctx.db.insert("versions", {
@@ -88,9 +101,16 @@ export const update = mutation({
     status: v.optional(
       v.union(v.literal("draft"), v.literal("active"), v.literal("archived"))
     ),
+    ownerId: v.string(),
   },
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
+    const { id, ownerId, ...updates } = args;
+    
+    const project = await ctx.db.get(id);
+    if (!project || project.ownerId !== ownerId) {
+      return;
+    }
+    
     const filtered = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
@@ -99,8 +119,13 @@ export const update = mutation({
 });
 
 export const remove = mutation({
-  args: { id: v.id("projects") },
+  args: { id: v.id("projects"), ownerId: v.string() },
   handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.id);
+    if (!project || project.ownerId !== args.ownerId) {
+      return;
+    }
+    
     // Delete all related data
     const versions = await ctx.db
       .query("versions")

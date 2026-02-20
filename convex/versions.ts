@@ -1,11 +1,25 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
+async function ensureProjectOwner(ctx: { db: any }, projectId: string, ownerId: string) {
+  const project = await ctx.db.get(projectId);
+  if (!project || project.ownerId !== ownerId) {
+    throw new Error("Project not found");
+  }
+  return project;
+}
+
 export const list = query({
   args: {
     projectId: v.id("projects"),
+    ownerId: v.string(),
   },
   handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.ownerId !== args.ownerId) {
+      return [];
+    }
+
     return await ctx.db
       .query("versions")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -24,6 +38,7 @@ export const get = query({
 export const create = mutation({
   args: {
     projectId: v.id("projects"),
+    ownerId: v.string(),
     jscadCode: v.string(),
     prompt: v.optional(v.string()),
     source: v.union(v.literal("ai"), v.literal("manual"), v.literal("parameter-tweak")),
@@ -34,6 +49,8 @@ export const create = mutation({
     errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await ensureProjectOwner(ctx, args.projectId, args.ownerId);
+
     // Get the latest version number
     const existingVersions = await ctx.db
       .query("versions")
@@ -72,12 +89,18 @@ export const create = mutation({
 export const updateMetadata = mutation({
   args: {
     id: v.id("versions"),
+    ownerId: v.string(),
     metadata: v.optional(v.any()),
     isValid: v.optional(v.boolean()),
     errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
+    const version = await ctx.db.get(args.id);
+    if (!version) {
+      throw new Error("Version not found");
+    }
+    await ensureProjectOwner(ctx, version.projectId, args.ownerId);
+    const { id, ownerId, ...updates } = args;
     const filtered = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
@@ -88,12 +111,18 @@ export const updateMetadata = mutation({
 export const saveDraft = mutation({
   args: {
     id: v.id("versions"),
+    ownerId: v.string(),
     jscadCode: v.string(),
   },
   handler: async (ctx, args) => {
     const version = await ctx.db.get(args.id);
     if (!version) {
       throw new Error("Version not found");
+    }
+
+    const project = await ctx.db.get(version.projectId);
+    if (!project || project.ownerId !== args.ownerId) {
+      throw new Error("Project not found");
     }
 
     if (version.jscadCode === args.jscadCode) {

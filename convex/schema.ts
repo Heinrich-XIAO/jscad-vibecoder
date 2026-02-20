@@ -9,8 +9,11 @@ export default defineSchema({
     status: v.union(v.literal("draft"), v.literal("active"), v.literal("archived")),
     currentVersionId: v.optional(v.id("versions")),
     thumbnailUrl: v.optional(v.string()),
+    ownerId: v.optional(v.string()),
   })
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_status", ["ownerId", "status"]),
 
   versions: defineTable({
     projectId: v.id("projects"),

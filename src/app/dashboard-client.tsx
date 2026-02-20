@@ -9,14 +9,19 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { useKeyboardShortcuts, type KeyboardShortcut } from "@/lib/use-keyboard-shortcuts";
 import { useRouter } from "next/navigation";
+import { useAuth, UserButton, SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { userId, isLoaded } = useAuth();
   
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
   const isConvexConfigured = convexUrl && convexUrl.startsWith("https://") && !convexUrl.includes("placeholder");
   
-  const projects = useQuery(api.projects.list, isConvexConfigured ? {} : "skip");
+  const projects = useQuery(
+    api.projects.list, 
+    isConvexConfigured && userId ? { ownerId: userId } : "skip"
+  );
   const templates = useQuery(api.templates.list, isConvexConfigured ? {} : "skip");
   const createProject = useMutation(api.projects.create);
   const deleteProject = useMutation(api.projects.remove);
@@ -31,11 +36,13 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleCreateProject = useCallback(async () => {
+    if (!userId) return;
     setIsCreating(true);
     try {
       const projectId = await createProject({
         name: "Untitled Project",
         description: "",
+        ownerId: userId,
       });
       if (projectId) {
         router.push(`/project/${String(projectId)}`);
@@ -43,15 +50,17 @@ export default function DashboardPage() {
     } finally {
       setIsCreating(false);
     }
-  }, [createProject, router]);
+  }, [createProject, router, userId]);
 
   const handleCreateFromTemplate = async (templateId: Id<"templates">) => {
+    if (!userId) return;
     setIsCreating(true);
     try {
       const projectId = await createProject({
         name: "New Project from Template",
         description: "",
         templateId,
+        ownerId: userId,
       });
       if (projectId) {
         router.push(`/project/${String(projectId)}`);
@@ -66,8 +75,9 @@ export default function DashboardPage() {
     e: React.MouseEvent
   ) => {
     e.stopPropagation();
+    if (!userId) return;
     if (confirm("Delete this project?")) {
-      await deleteProject({ id });
+      await deleteProject({ id, ownerId: userId });
     }
   };
 
@@ -165,19 +175,49 @@ export default function DashboardPage() {
             <Box className="w-8 h-8 text-primary" />
             <h1 className="text-2xl font-bold">OpenMech</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowSettings(true)}
-              className="p-2 hover:bg-secondary rounded-lg transition-colors"
-              title="Settings (Ctrl+,)"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
+          <div className="flex items-center gap-3">
+            <SignedIn>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="p-2 hover:bg-secondary rounded-lg transition-colors"
+                title="Settings (Ctrl+,)"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+              <UserButton afterSignOutUrl="/sign-in" />
+            </SignedIn>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button
+                  className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  Sign in
+                </button>
+              </SignInButton>
+            </SignedOut>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <SignedOut>
+        <main className="max-w-7xl mx-auto px-6 py-8">
+          <div className="text-center py-12">
+            <Box className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+            <h3 className="text-lg font-medium mb-2">Sign in to get started</h3>
+            <p className="text-muted-foreground mb-6">
+              Create an account or sign in to manage your 3D projects
+            </p>
+            <SignInButton mode="modal">
+              <button className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors mx-auto">
+                Sign In
+              </button>
+            </SignInButton>
+          </div>
+        </main>
+      </SignedOut>
+
+      <SignedIn>
+        <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <h2 className="text-xl font-semibold">Your Projects</h2>
@@ -345,7 +385,8 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-      </main>
+        </main>
+      </SignedIn>
 
       <SettingsDialog isOpen={showSettings} onClose={() => setShowSettings(false)} />
       <KeyboardShortcutsDialog

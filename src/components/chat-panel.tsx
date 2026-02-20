@@ -83,6 +83,7 @@ interface ChatPanelProps {
   onCodeChange: (code: string) => void;
   onPromptComplete?: () => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
+  ownerId: string;
 }
 
 const defaultProjectNames = new Set([
@@ -133,6 +134,7 @@ export function ChatPanel({
   onCodeChange,
   onPromptComplete,
   inputRef: externalInputRef,
+  ownerId,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -147,7 +149,10 @@ export function ChatPanel({
   const inputRef = (externalInputRef || internalInputRef) as React.RefObject<HTMLTextAreaElement>;
 
   // Convex hooks for chat persistence
-  const convexMessages = useQuery(api.chat.list, { projectId: projectId as Id<"projects"> });
+  const convexMessages = useQuery(api.chat.list, {
+    projectId: projectId as Id<"projects">,
+    ownerId,
+  });
   const sendMessage = useMutation(api.chat.send);
   const updateProject = useMutation(api.projects.update);
 
@@ -168,6 +173,7 @@ export function ChatPanel({
     try {
       await sendMessage({
         projectId: projectId as Id<"projects">,
+        ownerId,
         role: message.role,
         content: message.content,
         toolCalls: message.toolCalls,
@@ -413,6 +419,7 @@ export function ChatPanel({
         try {
           await updateProject({
             id: projectId as Id<"projects">,
+            ownerId,
             name: derivedName,
           });
         } catch (error) {
