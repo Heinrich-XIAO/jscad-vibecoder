@@ -11,7 +11,7 @@
 - ✅ **All Lint Errors Fixed** - Clean codebase with no TypeScript/React warnings
 - ✅ **Build System Working** - Next.js 16 builds successfully
 - ✅ **Convex Configuration** - Backend schema and functions ready
-- ✅ **Deploy Script Order** - `deploy.sh` now runs `convex deploy` after `vercel --prod`
+- ✅ **Deploy Script Order** - `deploy.sh` now runs `convex deploy` only after successful production Vercel deploys
 - ✅ **Environment Setup** - .env.local template with proper documentation
 - ✅ **Error Boundaries** - Graceful error handling with user-friendly crash pages
 - ✅ **3D Viewer Scroll Lock** - Wheel zoom no longer scrolls the page

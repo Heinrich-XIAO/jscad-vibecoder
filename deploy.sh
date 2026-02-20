@@ -2,6 +2,20 @@
 
 set -euo pipefail
 
+if [ "$#" -eq 0 ]; then
+  VERCEL_ARGS=(--prod)
+else
+  VERCEL_ARGS=("$@")
+fi
+
+IS_PROD_DEPLOY=false
+for arg in "${VERCEL_ARGS[@]}"; do
+  if [ "$arg" = "--prod" ]; then
+    IS_PROD_DEPLOY=true
+    break
+  fi
+done
+
 # Check if .env.local exists
 if [ ! -f .env.local ]; then
   echo "Creating .env.local..."
@@ -19,10 +33,14 @@ fi
 
 # Deploy Vercel
 echo "Deploying frontend to Vercel..."
-npx vercel --prod
+npx vercel "${VERCEL_ARGS[@]}"
 
-# Deploy Convex after Vercel finishes
-echo "Deploying Convex backend..."
-npx convex deploy
+if [ "$IS_PROD_DEPLOY" = true ]; then
+  # Deploy Convex only after successful production deploys
+  echo "Deploying Convex backend..."
+  npx convex deploy
+else
+  echo "Skipping Convex deploy (Vercel deploy is not production)."
+fi
 
 echo "Deployment complete!"
