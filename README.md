@@ -87,9 +87,14 @@ This will:
 1. Get an API key at [openrouter.ai/keys](https://openrouter.ai/keys)
 2. Open the app settings (gear icon) and paste your key
 3. Or set it in `.env.local`:
-   ```
+   ```text
    OPENROUTER_API_KEY=your-key-here
    ```
+4. To route requests through other OpenRouter endpoints (for example, Hack Club's proxy), also set:
+   ```text
+   NEXT_PUBLIC_OPENROUTER_BASE_URL=https://ai.hackclub.com
+   ```
+   See https://docs.ai.hackclub.com/<system-reminder> if you need to match their site requirements.
 
 ### 4. Configure Clerk (Authentication)
 

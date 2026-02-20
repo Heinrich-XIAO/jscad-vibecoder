@@ -1,3 +1,5 @@
+import { getOpenRouterEndpoint } from "@/lib/openrouter";
+
 const TITLE_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free";
 const MAX_TITLE_LENGTH = 60;
 
@@ -32,8 +34,9 @@ export async function POST(req: Request) {
       });
     }
 
-    const response = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
+    const OPENROUTER_URL = getOpenRouterEndpoint("/api/v1/chat/completions");
+
+    const response = await fetch(OPENROUTER_URL,
       {
         method: "POST",
         headers: {

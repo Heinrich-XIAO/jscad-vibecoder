@@ -18,6 +18,18 @@ const DEFAULT_SETTINGS: OpenRouterSettings = {
   temperature: 0.3,
 };
 
+const BASE_URL = (
+  process.env.NEXT_PUBLIC_OPENROUTER_BASE_URL ??
+  process.env.OPENROUTER_BASE_URL ??
+  "https://openrouter.ai"
+).replace(/\/+$/, "");
+
+export const OPENROUTER_BASE_URL = BASE_URL;
+
+export function getOpenRouterEndpoint(path: string) {
+  return `${BASE_URL}${path}`;
+}
+
 export function getOpenRouterSettings(): OpenRouterSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
 

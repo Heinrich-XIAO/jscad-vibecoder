@@ -2,6 +2,7 @@ import { z } from "zod";
 import path from "path";
 import { readFile } from "fs/promises";
 import { router, publicProcedure } from "../trpc";
+import { getOpenRouterEndpoint } from "@/lib/openrouter";
 
 export const generateInputSchema = z.object({
   prompt: z.string(),
@@ -384,6 +385,8 @@ interface DiagnosticItem {
 
 // --- OpenRouter API ---
 
+const OPENROUTER_CHAT_URL = getOpenRouterEndpoint("/api/v1/chat/completions");
+
 async function callOpenRouter(params: {
   apiKey: string;
   model: string;
@@ -393,7 +396,7 @@ async function callOpenRouter(params: {
   reasoning?: { effort: "low" | "high" };
 }) {
   const response = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
+    OPENROUTER_CHAT_URL,
     {
       method: "POST",
       headers: {
@@ -435,7 +438,7 @@ async function callOpenRouterStream(
   onDelta: (delta: string) => Promise<void> | void
 ) {
   const response = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
+    OPENROUTER_CHAT_URL,
     {
       method: "POST",
       headers: {
