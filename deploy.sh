@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Check if .env.local exists
 if [ ! -f .env.local ]; then
   echo "Creating .env.local..."
@@ -15,12 +17,12 @@ else
   echo "Convex is configured."
 fi
 
-# Deploy Convex
-echo "Deploying Convex backend..."
-npx convex deploy
-
 # Deploy Vercel
 echo "Deploying frontend to Vercel..."
 npx vercel --prod
+
+# Deploy Convex after Vercel finishes
+echo "Deploying Convex backend..."
+npx convex deploy
 
 echo "Deployment complete!"
