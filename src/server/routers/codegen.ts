@@ -116,7 +116,8 @@ export async function runCodegen(
     maxIterations,
   } = input;
 
-  const apiKey = openRouterApiKey || process.env.OPENROUTER_API_KEY;
+  const apiKey =
+    openRouterApiKey?.trim() || process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) {
     throw new Error(
       "OpenRouter API key is missing. Please configure it in Settings or on the server."

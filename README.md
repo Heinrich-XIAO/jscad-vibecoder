@@ -90,11 +90,12 @@ This will:
    ```text
    OPENROUTER_API_KEY=your-key-here
    ```
-4. To route requests through other OpenRouter endpoints (for example, Hack Club's proxy), also set:
+4. To route requests through an OpenRouter-compatible proxy (for example, Hack Club AI), set:
    ```text
-   NEXT_PUBLIC_OPENROUTER_BASE_URL=https://ai.hackclub.com
+   NEXT_PUBLIC_OPENROUTER_PROXY_URL=https://ai.hackclub.com/proxy/v1
    ```
-   See https://docs.ai.hackclub.com/<system-reminder> if you need to match their site requirements.
+   Server-only deployments can use `OPENROUTER_PROXY_URL` instead.
+   Docs: https://docs.ai.hackclub.com/
 
 ### 4. Configure Clerk (Authentication)
 

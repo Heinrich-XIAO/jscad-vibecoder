@@ -109,11 +109,13 @@ function deriveProjectName(prompt: string) {
 }
 
 async function requestProjectTitle(prompt: string, apiKey: string) {
+  const normalizedApiKey = apiKey.trim();
+
   try {
     const response = await fetch("/api/project-title", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, apiKey }),
+      body: JSON.stringify({ prompt, apiKey: normalizedApiKey }),
     });
 
     if (!response.ok) {
@@ -217,7 +219,7 @@ export function ChatPanel({
         body: JSON.stringify({
           prompt,
           currentCode,
-          openRouterApiKey: settings.apiKey,
+          openRouterApiKey: settings.apiKey.trim(),
           model: settings.model,
           maxIterations: 5,
         }),

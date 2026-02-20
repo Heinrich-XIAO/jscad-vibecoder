@@ -14,6 +14,7 @@
 - ✅ **Deploy Script Order** - `deploy.sh` now runs `convex deploy` only after successful production Vercel deploys
 - ✅ **Vercel Build Hook** - Vercel now runs `scripts/vercel-build.sh`, which triggers `convex deploy` only for production builds
 - ✅ **Environment Setup** - .env.local template with proper documentation
+- ✅ **OpenRouter Proxy URL Env Support** - `NEXT_PUBLIC_OPENROUTER_PROXY_URL` / `OPENROUTER_PROXY_URL` supported for services like Hack Club AI
 - ✅ **Error Boundaries** - Graceful error handling with user-friendly crash pages
 - ✅ **3D Viewer Scroll Lock** - Wheel zoom no longer scrolls the page
 - ✅ **Full-Height Layout** - Page and side panels reach the bottom edge

@@ -18,16 +18,47 @@ const DEFAULT_SETTINGS: OpenRouterSettings = {
   temperature: 0.3,
 };
 
-const BASE_URL = (
-  process.env.NEXT_PUBLIC_OPENROUTER_BASE_URL ??
-  process.env.OPENROUTER_BASE_URL ??
-  "https://openrouter.ai"
-).replace(/\/+$/, "");
+function normalizeUrl(value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.replace(/\/+$/, "");
+}
+
+const BASE_URL =
+  normalizeUrl(process.env.NEXT_PUBLIC_OPENROUTER_BASE_URL) ??
+  normalizeUrl(process.env.OPENROUTER_BASE_URL) ??
+  "https://openrouter.ai";
+
+const PROXY_URL =
+  normalizeUrl(process.env.NEXT_PUBLIC_OPENROUTER_PROXY_URL) ??
+  normalizeUrl(process.env.OPENROUTER_PROXY_URL);
+
+function resolveApiBaseUrl() {
+  if (PROXY_URL) return PROXY_URL;
+
+  if (/\/proxy\/v1$/i.test(BASE_URL)) {
+    return BASE_URL;
+  }
+
+  if (/^https:\/\/ai\.hackclub\.com$/i.test(BASE_URL)) {
+    return `${BASE_URL}/proxy/v1`;
+  }
+
+  return `${BASE_URL}/api/v1`;
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 export const OPENROUTER_BASE_URL = BASE_URL;
+export const OPENROUTER_PROXY_URL = PROXY_URL;
+export const OPENROUTER_API_BASE_URL = API_BASE_URL;
 
 export function getOpenRouterEndpoint(path: string) {
-  return `${BASE_URL}${path}`;
+  const normalizedPath =
+    (path.startsWith("/") ? path : `/${path}`).replace(/^\/api\/v1(?=\/|$)/, "") ||
+    "/";
+
+  return `${API_BASE_URL}${normalizedPath}`;
 }
 
 export function getOpenRouterSettings(): OpenRouterSettings {
