@@ -94,7 +94,7 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 		var pitch = this.circularPitch;
 		var resolution = 8;
 		
-		var singleTooth = createRackToothPolygon(pitch, this.addendum, this.dedendum, this.pressureAngle, resolution).extrude({ offset: [0, 0, this.thickness] });
+		var singleTooth = createRackToothPolygon(pitch, this.addendum, this.dedendum, this.pressureAngle, resolution).extrude({ offset: [0, 0, this.thickness] }).rotateZ(180);
 
 		var baseWidth = this.length;
 		var baseHeight = this.backHeight > 0 ? this.backHeight : this.module * 2;
