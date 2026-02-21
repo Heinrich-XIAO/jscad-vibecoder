@@ -82,18 +82,19 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     const model = editor?.getModel();
     if (!editor || !monaco || !model) return;
 
-    if (!error || !shouldHighlight) {
+    if (!error || !shouldHighlight || errorLine === undefined) {
       monaco.editor.setModelMarkers(model, "jscad-runtime", []);
       decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, []);
       return;
     }
 
+    const lineNumber = errorLine;
     const markerColumn = errorColumn ?? 1;
     monaco.editor.setModelMarkers(model, "jscad-runtime", [
       {
-        startLineNumber: errorLine,
+        startLineNumber: lineNumber,
         startColumn: markerColumn,
-        endLineNumber: errorLine,
+        endLineNumber: lineNumber,
         endColumn: markerColumn + 1,
         message: primaryMessage,
         severity: monaco.MarkerSeverity.Error,
@@ -102,7 +103,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
 
     decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, [
       {
-        range: new monaco.Range(errorLine, 1, errorLine, 1),
+        range: new monaco.Range(lineNumber, 1, lineNumber, 1),
         options: {
           isWholeLine: true,
           className: "jscad-error-line-highlight",
@@ -111,7 +112,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       },
     ]);
 
-    editor.revealLineInCenterIfOutsideViewport(errorLine);
+    editor.revealLineInCenterIfOutsideViewport(lineNumber);
   }, [error, errorColumn, errorLine, primaryMessage, shouldHighlight]);
 
   useEffect(() => {

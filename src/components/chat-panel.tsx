@@ -86,6 +86,8 @@ interface ChatPanelProps {
   ownerId: string;
 }
 
+const PENDING_MESSAGE_PREFIX = "pending-";
+
 const defaultProjectNames = new Set([
   "untitled project",
   "new project from template",
@@ -160,36 +162,49 @@ export function ChatPanel({
 
   // Load messages from Convex when they change
   useEffect(() => {
-    if (convexMessages) {
-      const loadedMessages: ChatMessage[] = convexMessages.map((msg: { _id: string; role: string; content: string; toolCalls?: unknown }) => ({
-        id: msg._id,
-        role: msg.role as "user" | "assistant" | "system" | "tool",
-        content: msg.content,
-        toolCalls: msg.toolCalls as Array<{ toolName: string; args: Record<string, unknown>; result: unknown }> | undefined,
-      }));
-      setMessages(loadedMessages);
-    }
+    if (!convexMessages) return;
+
+    const loadedMessages: ChatMessage[] = convexMessages.map((msg: { _id: string; role: string; content: string; toolCalls?: unknown }) => ({
+      id: msg._id,
+      role: msg.role as "user" | "assistant" | "system" | "tool",
+      content: msg.content,
+      toolCalls: msg.toolCalls as Array<{ toolName: string; args: Record<string, unknown>; result: unknown }> | undefined,
+    }));
+
+    setMessages((prev) => {
+      const pending = prev.filter((msg) => msg.id.startsWith(PENDING_MESSAGE_PREFIX));
+      return [...loadedMessages, ...pending];
+    });
   }, [convexMessages]);
 
-  const persistMessage = useCallback(async (message: Omit<ChatMessage, "id">) => {
+  const persistMessage = useCallback(
+    async (message: Omit<ChatMessage, "id">, pendingId: string) => {
     try {
-      await sendMessage({
+      const persisted = await sendMessage({
         projectId: projectId as Id<"projects">,
         ownerId,
         role: message.role,
         content: message.content,
         toolCalls: message.toolCalls,
       });
+      if (persisted && typeof pendingId === "string") {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === pendingId ? { ...msg, id: persisted ?? msg.id } : msg
+          )
+        );
+      }
     } catch (error) {
       console.error("Failed to persist message:", error);
     }
-  }, [projectId, sendMessage]);
+  }, [ownerId, projectId, sendMessage]);
 
   const onAddMessage = useCallback(async (message: Omit<ChatMessage, "id">) => {
     // Add to local state immediately for responsiveness
-    setMessages((prev) => [...prev, { ...message, id: Math.random().toString(36).slice(2) }]);
+    const pendingId = `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`;
+    setMessages((prev) => [...prev, { ...message, id: pendingId }]);
     // Persist to Convex
-    await persistMessage(message);
+    await persistMessage(message, pendingId);
   }, [persistMessage]);
 
   const onCodeUpdate = useCallback((code: string) => {
