@@ -100,23 +100,22 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 		var baseHeight = this.backHeight > 0 ? this.backHeight : this.module * 2;
 		var overlap = Math.max(0.01, this.module * 0.02);
 		var baseTop = -this.dedendum + overlap;
-		var baseBar = cube({ size: [baseWidth, baseHeight, this.thickness], center: true })
-			.translate([0, baseTop - baseHeight / 2, 0]);
+		var basePoints = [
+			[-baseWidth / 2, baseTop],
+			[baseWidth / 2, baseTop],
+			[baseWidth / 2, baseTop - baseHeight],
+			[-baseWidth / 2, baseTop - baseHeight]
+		];
+		var basePolygon = new CSG.Polygon2D(basePoints.map(p => new CSG.Vector2D(p[0], p[1])));
+		var baseBar = basePolygon.extrude({ offset: [0, 0, this.thickness] });
 
-		var rackTeeth = null;
+		var rack = baseBar;
 		for(var i = 0; i < this.teethNumber; i++) {
 			var offset = (-this.length / 2.0) + (i + 0.5) * pitch;
-			var tooth = singleTooth.translate([offset, 0, 0]);
-			rackTeeth = rackTeeth ? rackTeeth.union(tooth) : tooth;
+			rack = rack.union(singleTooth.translate([offset, 0, 0]));
 		}
 
-		var baseOffset = [0, 0, -this.thickness / 2.0];
-		var teethOffset = [0, 0, -this.thickness];
-		var shiftedBase = baseBar.translate(baseOffset);
-		if (rackTeeth) {
-			return [shiftedBase, rackTeeth.translate(teethOffset)];
-		}
-		return [shiftedBase];
+		return rack.translate([0, 0, -this.thickness / 2.0]);
 	};
 };
 
