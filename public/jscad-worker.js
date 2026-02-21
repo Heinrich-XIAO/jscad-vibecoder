@@ -44,13 +44,29 @@ function normalizeSpec(path, parentUrl) {
   throw new Error('Unsupported module path: ' + path);
 }
 
-function readSourceSync(url) {
+function readSourceSync(url, cacheHints) {
   const xhr = new XMLHttpRequest();
   xhr.open('GET', url, false);
+  xhr.setRequestHeader('Cache-Control', 'no-cache');
+  if (cacheHints?.etag) {
+    xhr.setRequestHeader('If-None-Match', cacheHints.etag);
+  }
+  if (cacheHints?.lastModified) {
+    xhr.setRequestHeader('If-Modified-Since', cacheHints.lastModified);
+  }
   xhr.send(null);
 
+  if (xhr.status === 304) {
+    return { status: 304 };
+  }
+
   if (xhr.status >= 200 && xhr.status < 300) {
-    return xhr.responseText;
+    return {
+      status: xhr.status,
+      source: xhr.responseText,
+      etag: xhr.getResponseHeader('ETag'),
+      lastModified: xhr.getResponseHeader('Last-Modified'),
+    };
   }
 
   throw new Error('Failed to load module ' + url + ' (status ' + xhr.status + ')');
@@ -59,13 +75,18 @@ function readSourceSync(url) {
 function executeExternalModule(path, parentUrl) {
   const normalized = normalizeSpec(path, parentUrl);
   const cached = remoteModuleCache.get(normalized);
-  if (cached) return cached.exports;
-
   if (evaluatingModules.has(normalized)) {
     throw new Error('Circular external module reference: ' + normalized);
   }
 
-  const source = readSourceSync(normalized);
+  const response = readSourceSync(normalized, cached);
+  if (response.status === 304) {
+    if (!cached) {
+      throw new Error('Received 304 for uncached module ' + normalized);
+    }
+    return cached.exports;
+  }
+
   const externalModule = { exports: {} };
   remoteModuleCache.set(normalized, externalModule);
   evaluatingModules.add(normalized);
@@ -95,8 +116,10 @@ function executeExternalModule(path, parentUrl) {
       throw new Error('include() requires a remote URL or /jscad-libs path: ' + spec);
     };
 
-    const fn = new Function('require', 'module', 'exports', 'include', 'window', source);
+    const fn = new Function('require', 'module', 'exports', 'include', 'window', response.source);
     fn(localRequire, externalModule, externalModule.exports, include, self.window);
+    externalModule.etag = response.etag;
+    externalModule.lastModified = response.lastModified;
     return externalModule.exports;
   } finally {
     evaluatingModules.delete(normalized);
