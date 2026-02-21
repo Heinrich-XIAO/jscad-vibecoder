@@ -639,7 +639,7 @@ function buildToolDefinitions() {
       function: {
         name: "measure_geometry",
         description:
-          "Measure properties of a named geometry (bounding box, volume, surface area, etc.).",
+          "Measure properties of a named geometry (bounding box, volume, surface area, etc.). For gears and racks, can also calculate pitch circle/line for proper meshing alignment.",
         parameters: {
           type: "object",
           properties: {
@@ -660,6 +660,30 @@ function buildToolDefinitions() {
                   "dimensions",
                 ],
               },
+            },
+            gearParams: {
+              type: "object",
+              properties: {
+                module: {
+                  type: "number",
+                  description: "Gear module in mm (tooth size)",
+                },
+                teeth: {
+                  type: "number",
+                  description: "Number of teeth on the gear",
+                },
+              },
+              description: "For gears: provide module and teeth count to calculate pitch circle (diameter = module * teeth)",
+            },
+            rackParams: {
+              type: "object",
+              properties: {
+                module: {
+                  type: "number",
+                  description: "Rack module in mm (must match gear module for proper meshing)",
+                },
+              },
+              description: "For racks: provide module to calculate pitch line position",
             },
           },
           required: ["geometry"],
@@ -852,6 +876,97 @@ function buildToolDefinitions() {
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "position_relative",
+        description:
+          "Position one geometry relative to another. Generates the correct translate() code for placement. Use this instead of manually calculating translate coordinates. Supports gear/rack pitch alignment for proper meshing.",
+        parameters: {
+          type: "object",
+          properties: {
+            target: {
+              type: "string",
+              description: "Variable name of the geometry to move/position",
+            },
+            reference: {
+              type: "string",
+              description: "Variable name of the reference geometry to position relative to",
+            },
+            alignment: {
+              type: "string",
+              enum: ["next_to", "above", "below", "center_on", "pitch_aligned"],
+              description: "Type of alignment: next_to (side by side), above/below (stacked), center_on (same center), pitch_aligned (gear/rack meshing)",
+            },
+            direction: {
+              type: "string",
+              enum: ["left", "right", "front", "back"],
+              description: "For 'next_to' alignment: which side of the reference to place target",
+            },
+            gap: {
+              type: "number",
+              description: "Gap between geometries in mm (default: 0). For gears/racks, use 0.1-0.2 for clearance.",
+            },
+            targetPitchRadius: {
+              type: "number",
+              description: "For 'pitch_aligned': pitch circle radius of target gear (module * teeth / 2)",
+            },
+            referencePitchRadius: {
+              type: "number",
+              description: "For 'pitch_aligned': pitch circle radius of reference gear, or 0 if reference is a rack",
+            },
+            referenceIsRack: {
+              type: "boolean",
+              description: "For 'pitch_aligned': set true if reference is a rack (pitch line, not circle)",
+            },
+          },
+          required: ["target", "reference", "alignment"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "check_alignment",
+        description:
+          "Verify that two geometries are properly aligned. Checks overlap, touching, or gear/rack pitch meshing. Returns offset distance and alignment status.",
+        parameters: {
+          type: "object",
+          properties: {
+            geometryA: {
+              type: "string",
+              description: "Variable name of the first geometry",
+            },
+            geometryB: {
+              type: "string",
+              description: "Variable name of the second geometry",
+            },
+            checkType: {
+              type: "string",
+              enum: ["overlap", "touching", "pitch_mesh"],
+              description: "Type of alignment check: overlap (share space), touching (adjacent), pitch_mesh (gear/rack meshing)",
+            },
+            pitchRadiusA: {
+              type: "number",
+              description: "For 'pitch_mesh': pitch circle radius of geometryA (module * teeth / 2), or 0 if it's a rack",
+            },
+            pitchRadiusB: {
+              type: "number",
+              description: "For 'pitch_mesh': pitch circle radius of geometryB, or 0 if it's a rack",
+            },
+            isRackA: {
+              type: "boolean",
+              description: "For 'pitch_mesh': true if geometryA is a rack",
+            },
+            isRackB: {
+              type: "boolean",
+              description: "For 'pitch_mesh': true if geometryB is a rack",
+            },
+          },
+          required: ["geometryA", "geometryB", "checkType"],
+        },
+      },
+    },
   ];
 }
 
@@ -982,6 +1097,71 @@ module.exports = { main, getParameterDefinitions }
 8. Use list_variables to understand the current code structure
 9. Use split_components to keep code organized for complex models
 10. Use calculate for math calculations (e.g., computing coordinates, dimensions, angles)
+11. Use position_relative for placing geometries relative to each other - PREFER this over manual translate() calculations
+12. Use check_alignment to verify proper gear/rack meshing before finalizing code
+
+## Relative Positioning (IMPORTANT - Use Tools, Not Manual Calculations)
+
+### Positioning Geometries Relative to Each Other
+Instead of manually calculating translate([x,y,z]) coordinates, use the position_relative tool:
+
+**For gears and racks (pitch-aligned meshing):**
+\`\`\`
+// Step 1: Create the geometries
+include('/jscad-libs/mechanics/gears.jscad')
+include('/jscad-libs/mechanics/racks.jscad')
+const gear = unwrap(window.jscad.tspi.gear(printerSettings, 40, 8, 6, 1, 20).getModel())
+const rack = unwrap(window.jscad.tspi.rack(printerSettings, 100, 8, 1, 20, 20, 0, 2).getModel())
+
+// Step 2: Use position_relative tool with pitch_aligned
+// For gear (module=1, teeth=20): pitchRadius = 1 * 20 / 2 = 10mm
+// For rack: referenceIsRack = true, pitchRadius = 0
+// Tool call: position_relative(target="gear", reference="rack", alignment="pitch_aligned", 
+//             targetPitchRadius=10, referenceIsRack=true, gap=0.1)
+// Returns: translate([10.1, 0, 0], gear)
+
+// Step 3: Apply the returned translate expression
+const positionedGear = translate([10.1, 0, 0], gear)
+return [rack, positionedGear]
+\`\`\`
+
+**For gear-to-gear meshing:**
+\`\`\`
+// Two gears: gearA (module=1, teeth=20) and gearB (module=1, teeth=30)
+// pitchRadiusA = 10mm, pitchRadiusB = 15mm
+// position_relative(target="gearB", reference="gearA", alignment="pitch_aligned",
+//                   targetPitchRadius=15, referencePitchRadius=10, gap=0)
+// Returns: translate([25, 0, 0], gearB)  // 10 + 15 = 25mm center distance
+\`\`\`
+
+**For general positioning (next_to, above, below):**
+\`\`\`
+// Place boxB to the right of boxA with 2mm gap
+// position_relative(target="boxB", reference="boxA", alignment="next_to", 
+//                   direction="right", gap=2)
+// Returns translate expression - you still need to measure geometries to get exact sizes
+\`\`\`
+
+### Checking Alignment
+Use check_alignment to verify proper meshing before finalizing:
+
+\`\`\`
+// Verify gear-rack meshing
+check_alignment(geometryA="gear", geometryB="rack", checkType="pitch_mesh",
+                pitchRadiusA=10, pitchRadiusB=0, isRackA=false, isRackB=true)
+// Returns: expected center distance, alignment verification info
+\`\`\`
+
+### Getting Pitch Circle/Line Info
+Use measure_geometry with gearParams or rackParams:
+
+\`\`\`
+measure_geometry(geometry="gear", gearParams={ module: 1, teeth: 20 })
+// Returns: { pitchCircle: { pitchDiameter: 20, pitchRadius: 10, ... } }
+
+measure_geometry(geometry="rack", rackParams={ module: 1 })
+// Returns: { pitchLine: { module: 1, description: "..." } }
+\`\`\`
 
 ## External Libraries
 - You may load remote helper libraries via include("https://...") for side-effect scripts.
@@ -1189,18 +1369,41 @@ function executeToolCall(
         },
       };
 
-    case "measure_geometry":
-      return {
-        output: {
-          note: "Measurement requires runtime evaluation. The geometry will be measured when the code is rendered in the browser.",
-          geometry: args.geometry,
-          requestedMeasurements: args.measurements || [
-            "boundingBox",
-            "volume",
-            "dimensions",
-          ],
-        },
+    case "measure_geometry": {
+      const output: Record<string, unknown> = {
+        note: "Measurement requires runtime evaluation. The geometry will be measured when the code is rendered in the browser.",
+        geometry: args.geometry,
+        requestedMeasurements: args.measurements || [
+          "boundingBox",
+          "volume",
+          "dimensions",
+        ],
       };
+
+      const gearParams = args.gearParams as { module?: number; teeth?: number } | undefined;
+      const rackParams = args.rackParams as { module?: number } | undefined;
+
+      if (gearParams && gearParams.module && gearParams.teeth) {
+        const pitchDiameter = gearParams.module * gearParams.teeth;
+        const pitchRadius = pitchDiameter / 2;
+        output.pitchCircle = {
+          module: gearParams.module,
+          teeth: gearParams.teeth,
+          pitchDiameter,
+          pitchRadius,
+          description: `Pitch circle: diameter = module * teeth = ${gearParams.module} * ${gearParams.teeth} = ${pitchDiameter}mm. Use this for gear meshing alignment.`,
+        };
+      }
+
+      if (rackParams && rackParams.module) {
+        output.pitchLine = {
+          module: rackParams.module,
+          description: `Rack pitch line at module height from tooth base. The pitch line is where the gear pitch circle rolls. Use for gear-rack meshing alignment.`,
+        };
+      }
+
+      return { output };
+    }
 
     case "check_printability":
       return {
@@ -1326,6 +1529,160 @@ function executeToolCall(
           },
         };
       }
+    }
+
+    case "position_relative": {
+      const target = args.target as string;
+      const reference = args.reference as string;
+      const alignment = args.alignment as string;
+      const direction = args.direction as string | undefined;
+      const gap = (args.gap as number) ?? 0;
+      const targetPitchRadius = args.targetPitchRadius as number | undefined;
+      const referencePitchRadius = args.referencePitchRadius as number | undefined;
+      const referenceIsRack = (args.referenceIsRack as boolean) ?? false;
+
+      let translateExpr: string;
+      let explanation: string;
+
+      switch (alignment) {
+        case "next_to": {
+          const dir = direction ?? "right";
+          const axis = dir === "left" || dir === "right" ? "x" : "y";
+          const sign = dir === "right" || dir === "back" ? 1 : -1;
+          translateExpr = `translate([${axis === "x" ? `${sign === 1 ? "" : "-"}(refSize[0]/2 + tgtSize[0]/2 + ${gap})` : "0"}, ${axis === "y" ? `${sign === 1 ? "" : "-"}(refSize[1]/2 + tgtSize[1]/2 + ${gap})` : "0"}, 0], ${target})`;
+          explanation = `Place ${target} ${dir} of ${reference} with ${gap}mm gap. Requires measuring both geometries first to get exact coordinates.`;
+          break;
+        }
+        case "above": {
+          translateExpr = `translate([0, 0, refSize[2]/2 + tgtSize[2]/2 + ${gap}], ${target})`;
+          explanation = `Place ${target} above ${reference} (stacked on Z axis) with ${gap}mm gap.`;
+          break;
+        }
+        case "below": {
+          translateExpr = `translate([0, 0, -(refSize[2]/2 + tgtSize[2]/2 + ${gap})], ${target})`;
+          explanation = `Place ${target} below ${reference} with ${gap}mm gap.`;
+          break;
+        }
+        case "center_on": {
+          translateExpr = `translate([0, 0, 0], ${target})`;
+          explanation = `${target} and ${reference} will share the same center point.`;
+          break;
+        }
+        case "pitch_aligned": {
+          if (targetPitchRadius === undefined) {
+            return {
+              output: {
+                success: false,
+                error: "pitch_aligned requires targetPitchRadius (module * teeth / 2 for the gear to position)",
+              },
+            };
+          }
+
+          if (referenceIsRack) {
+            const distance = targetPitchRadius + gap;
+            translateExpr = `translate([${distance.toFixed(3)}, 0, 0], ${target})`;
+            explanation = `Position gear ${target} (pitch radius ${targetPitchRadius}mm) to mesh with rack ${reference}. Pitch circle touches pitch line at distance ${distance.toFixed(3)}mm.`;
+          } else if (referencePitchRadius !== undefined) {
+            const centerDistance = targetPitchRadius + referencePitchRadius + gap;
+            translateExpr = `translate([${centerDistance.toFixed(3)}, 0, 0], ${target})`;
+            explanation = `Position gear ${target} (pitch radius ${targetPitchRadius}mm) to mesh with gear ${reference} (pitch radius ${referencePitchRadius}mm). Center distance = ${centerDistance.toFixed(3)}mm.`;
+          } else {
+            return {
+              output: {
+                success: false,
+                error: "pitch_aligned requires either referencePitchRadius (for gear-gear meshing) or referenceIsRack=true (for gear-rack meshing)",
+              },
+            };
+          }
+          break;
+        }
+        default:
+          return {
+            output: {
+              success: false,
+              error: `Unknown alignment type: ${alignment}`,
+            },
+          };
+      }
+
+      return {
+        output: {
+          success: true,
+          target,
+          reference,
+          alignment,
+          direction,
+          gap,
+          translateExpression: translateExpr,
+          explanation,
+          usageNote: "Use this translate expression in your code. For 'next_to', 'above', 'below' alignments, you need to measure geometries first to get exact sizes. For 'pitch_aligned', the coordinates are pre-calculated.",
+        },
+      };
+    }
+
+    case "check_alignment": {
+      const geometryA = args.geometryA as string;
+      const geometryB = args.geometryB as string;
+      const checkType = args.checkType as string;
+      const pitchRadiusA = args.pitchRadiusA as number | undefined;
+      const pitchRadiusB = args.pitchRadiusB as number | undefined;
+      const isRackA = (args.isRackA as boolean) ?? false;
+      const isRackB = (args.isRackB as boolean) ?? false;
+
+      const output: Record<string, unknown> = {
+        geometryA,
+        geometryB,
+        checkType,
+        note: "Alignment check requires runtime evaluation of geometry positions.",
+      };
+
+      if (checkType === "pitch_mesh") {
+        if (pitchRadiusA === undefined || pitchRadiusB === undefined) {
+          return {
+            output: {
+              ...output,
+              success: false,
+              error: "pitch_mesh check requires pitchRadiusA and pitchRadiusB parameters. For racks, use pitchRadius=0 and set isRackA or isRackB to true.",
+            },
+          };
+        }
+
+        const isGearGear = !isRackA && !isRackB;
+        const isGearRack = (!isRackA && isRackB) || (isRackA && !isRackB);
+
+        if (isGearGear) {
+          const expectedCenterDistance = pitchRadiusA + pitchRadiusB;
+          output.pitchMesh = {
+            type: "gear-to-gear",
+            gearA: { pitchRadius: pitchRadiusA, isRack: isRackA },
+            gearB: { pitchRadius: pitchRadiusB, isRack: isRackB },
+            expectedCenterDistance,
+            description: `For proper meshing, center distance should be ${expectedCenterDistance.toFixed(3)}mm (sum of pitch radii). Check that geometries are positioned at this distance.`,
+          };
+        } else if (isGearRack) {
+          const gearRadius = isRackA ? pitchRadiusB : pitchRadiusA;
+          output.pitchMesh = {
+            type: "gear-to-rack",
+            gear: { pitchRadius: gearRadius },
+            rack: { pitchLine: "at y=0 in rack's coordinate system" },
+            expectedDistance: gearRadius,
+            description: `For proper meshing, gear center should be ${gearRadius.toFixed(3)}mm from rack's pitch line. The gear's pitch circle should touch the rack's pitch line.`,
+          };
+        } else {
+          output.pitchMesh = {
+            type: "rack-to-rack",
+            description: "Two racks cannot mesh directly - they need an intermediate gear.",
+          };
+        }
+
+        output.suggestion = "Use position_relative tool with 'pitch_aligned' to generate correct positioning code.";
+      } else if (checkType === "overlap") {
+        output.suggestion = "Check that bounding boxes of both geometries intersect. Use measure_geometry to get bounds, then verify overlap.";
+      } else if (checkType === "touching") {
+        output.suggestion = "Check that geometries are adjacent without gap. Use measure_geometry to get bounds and verify faces are at same coordinate.";
+      }
+
+      return { output };
     }
 
     default:
