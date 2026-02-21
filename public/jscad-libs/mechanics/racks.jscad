@@ -27,8 +27,12 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 			this.parameters[knownParameters[i].name] = params[knownParameters[i].name];
 		} else if(knownParameters[i].default !== -1) {
 			this.parameters[knownParameters[i].name] = knownParameters[i].default;
+		} else {
+			this.parameters[knownParameters[i].name] = 0;
 		}
 	}
+	this.printer = Object.assign(this.printer, this.parameters, this.printer);
+	this.error = this.error ? this.error : false;
 
 	this.module = this.parameters['module'];
 	this.pressureAngle = this.parameters['pressureAngle'];
