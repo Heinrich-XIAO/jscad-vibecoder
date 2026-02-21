@@ -243,6 +243,18 @@ export async function runCodegen(
             role: "system",
             content: `JSCAD runtime error after ${toolCall.function.name}:\n${runtime.error}\nPlease fix this error.`,
           });
+          const normalizedError = runtime.error.toLowerCase();
+          if (
+            normalizedError.includes("must return an array") ||
+            normalizedError.includes("array contains invalid") ||
+            normalizedError.includes("returned an empty array")
+          ) {
+            messages.push({
+              role: "system",
+              content:
+                "Automatic runtime checks detected that main() returned a single object (or otherwise invalid geometry) instead of an array. Please wrap every geometry in an array before finishing your response.",
+            });
+          }
         }
       }
 
