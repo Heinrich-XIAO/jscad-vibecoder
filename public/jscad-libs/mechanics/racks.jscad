@@ -109,13 +109,20 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 		var basePolygon = new CSG.Polygon2D(basePoints.map(p => new CSG.Vector2D(p[0], p[1])));
 		var baseBar = basePolygon.extrude({ offset: [0, 0, this.thickness] });
 
-		var rack = baseBar;
+		var rackTeeth = null;
 		for(var i = 0; i < this.teethNumber; i++) {
 			var offset = (-this.length / 2.0) + (i + 0.5) * pitch;
-			rack = rack.union(singleTooth.translate([offset, 0, 0]));
+			var tooth = singleTooth.translate([offset, 0, 0]);
+			rackTeeth = rackTeeth ? rackTeeth.union(tooth) : tooth;
 		}
 
-		return rack.translate([0, 0, -this.thickness / 2.0]);
+		var baseOffset = [0, 0, -this.thickness / 2.0];
+		var teethOffset = [0, 0, -this.thickness];
+		var shiftedBase = baseBar.translate(baseOffset);
+		if (rackTeeth) {
+			return [shiftedBase, rackTeeth.translate(teethOffset)];
+		}
+		return [shiftedBase];
 	};
 };
 
