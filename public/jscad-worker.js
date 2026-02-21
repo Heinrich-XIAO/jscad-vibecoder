@@ -44,6 +44,21 @@ function normalizeSpec(path, parentUrl) {
   throw new Error('Unsupported module path: ' + path);
 }
 
+function sanitizeGeometry(value) {
+  if (value == null || typeof value !== 'object') return value;
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return value;
+  if (Array.isArray(value)) return value.map(sanitizeGeometry);
+
+  const clean = {};
+  for (const key of Object.keys(value)) {
+    if (key === '__v1Wrapped') continue;
+    const prop = value[key];
+    if (typeof prop === 'function') continue;
+    clean[key] = sanitizeGeometry(prop);
+  }
+  return clean;
+}
+
 function readSourceSync(url, cacheHints) {
   const xhr = new XMLHttpRequest();
   xhr.open('GET', url, false);
@@ -191,10 +206,11 @@ self.onmessage = function(e) {
       if (invalidIndex !== -1) {
         throw new Error('main() array contains an invalid geometry at index ' + invalidIndex + '.');
       }
+      const sanitizedGeometries = sanitizeGeometry(geometries);
       
       self.postMessage({ 
         type: 'result', 
-        geometries, 
+        geometries: sanitizedGeometries, 
         metadata: { polygonCount: geometries.length } 
       });
     } catch (error) {
