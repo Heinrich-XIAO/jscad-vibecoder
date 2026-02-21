@@ -5,7 +5,7 @@
 
 ---
 
-## ✅ Completed Features (19/21)
+## ✅ Completed Features (20/21)
 
 ### Critical Fixes & Infrastructure
 - ✅ **All Lint Errors Fixed** - Clean codebase with no TypeScript/React warnings
@@ -34,6 +34,7 @@
   - 3D printability analysis (manifold checks, thin walls, overhangs)
   - Center position and bounding box calculations
 - ✅ **Project Search** - Real-time search filtering projects by name and description
+- ✅ **Rack Library** - Involute rack helper shares the gear profile and sensible length/teeth defaults for straight linears
 
 ### User Experience
 - ✅ **Chat Persistence** - Messages saved to Convex database with real-time sync
@@ -142,12 +143,12 @@ bun run dev
 | Category | Completed | Total | Progress |
 |----------|-----------|-------|----------|
 | Core Fixes | 5 | 5 | 100% ✅ |
-| 3D Modeling | 4 | 5 | 80% |
+| 3D Modeling | 5 | 5 | 100% |
 | AI Tools | 15 | 15 | 100% ✅ |
 | AI Runtime Checks | 1 | 1 | 100% ✅ |
 | UX Features | 7 | 7 | 100% ✅ |
 | Infrastructure | 2 | 3 | 67% |
-| **TOTAL** | **20** | **22** | **91%** |
+| **TOTAL** | **21** | **22** | **95%** |
 
 ---
 
