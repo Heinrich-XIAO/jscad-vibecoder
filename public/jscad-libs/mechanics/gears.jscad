@@ -4,6 +4,37 @@ require('/jscad-libs/compat/v1.js');
 if(typeof window.jscad !== 'object') { window.jscad = new Object(); }
 if(typeof window.jscad.tspi !== 'object') { window.jscad.tspi = new Object(); }
 
+function createSingleToothPolygon(maxAngle, baseRadius, angularToothWidthAtBase, resolution) {
+	var points = [new CSG.Vector2D(0,0)];
+	for(var i = 0; i <= resolution; i++) {
+		var normalizedPosition = Math.pow(i / resolution, 2 / 3);
+		var currentAngle = maxAngle * normalizedPosition;
+		var tanLength = currentAngle * baseRadius;
+
+		var radialVector = CSG.Vector2D.fromAngle(currentAngle);
+		var tangentialVector = radialVector.normal().times(-tanLength);
+		var point = radialVector.times(baseRadius).plus(tangentialVector);
+		points[i + 1] = point;
+
+		radialVector = CSG.Vector2D.fromAngle(angularToothWidthAtBase - currentAngle);
+		tangentialVector = radialVector.normal().times(tanLength);
+		point = radialVector.times(baseRadius).plus(tangentialVector);
+		points[(2 * resolution) + 2 - i] = point;
+	}
+	return new CSG.Polygon2D(points);
+}
+
+function createBaseCirclePolygon(numTeeth, angularToothWidthAtBase, rootRadius) {
+	var points = [];
+	var toothAngle = 2 * Math.PI / numTeeth;
+	var toothCenterAngle = 0.5 * angularToothWidthAtBase;
+	for(var k = 0; k < numTeeth; k++) {
+		var currentAngle = toothCenterAngle + k * toothAngle;
+		points.push(CSG.Vector2D.fromAngle(currentAngle).times(rootRadius));
+	}
+	return new CSG.Polygon2D(points);
+}
+
 window.jscad.tspi.involuteGear = function(printer, params) {
 	knownParameters = [
 		{ name: 'teethNumber',			type: 'number',					default: -1				},
@@ -128,41 +159,19 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 		}
 		
 		var angle;
-		var currentAngle;
-		var currentTangentLength;
-		var radialVector;
-		var tangentialVector;
-		var point;
-
-		var points = [new CSG.Vector2D(0,0)];
-
 		var tangentAtPitchCircle = Math.sqrt(this.pitchRadius*this.pitchRadius - this.baseCircleRadius*this.baseCircleRadius);
 		var angleAtPitchCircle = tangentAtPitchCircle / this.baseCircleRadius;
 		var angularDifference = angleAtPitchCircle - Math.atan(angleAtPitchCircle);
 		var angularToothWidthBase = Math.PI / this.teethNumber + 2 * angularDifference;
 
-		for(var i = 0; i <= this.resolution; i++) {
-			currentAngle = maxAngle * i / this.resolution;
-			currentTangentLength = currentAngle * this.baseCircleRadius;
-
-			radialVector = CSG.Vector2D.fromAngle(currentAngle);
-			tangentialVector = radialVector.normal();
-			point = radialVector.times(this.baseCircleRadius).plus(tangentialVector.times(currentTangentLength));
-			points[i + 1] = point;
-
-			radialVector = CSG.Vector2D.fromAngle(angularToothWidthBase - currentAngle);
-			tangentialVector = radialVector.normal().negated();
-			point = radialVector.times(this.baseCircleRadius).plus(tangentialVector.times(currentTangentLength));
-			points[2 * this.resolution + 2 - i] = point;
-		}
-
+		var toothPolygon = createSingleToothPolygon(maxAngle, this.baseCircleRadius, angularToothWidthBase, this.resolution);
 		var singleTooth;
 
 		if(this.inclination != 0) {
 			var twistAngle = this.thickness * Math.tan(this.inclination * Math.PI/180.0) * 180 / (this.pitchRadius * Math.PI);
-			singleTooth = (new CSG.Polygon2D(points)).extrude({ offset: [0, 0, this.thickness], twistangle: twistAngle, twiststeps: this.inclinationSteps});
+			singleTooth = toothPolygon.extrude({ offset: [0, 0, this.thickness], twistangle: twistAngle, twiststeps: this.inclinationSteps});
 		} else {
-			singleTooth = (new CSG.Polygon2D(points)).extrude({ offset: [0, 0, this.thickness]});
+			singleTooth = toothPolygon.extrude({ offset: [0, 0, this.thickness]});
 		}
 
 		var teeth = new CSG();
@@ -171,14 +180,7 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 			teeth = teeth.unionForNonIntersecting(singleTooth.rotateZ(angle));
 		}
 
-		points = [];
-		var toothAngle = 2 * Math.PI / this.teethNumber;
-		var toothCenterAngle = 0.5 * angularToothWidthBase;
-		for(i = 0; i < this.teethNumber; i++) {
-			angle = toothCenterAngle + i * toothAngle;
-			points.push(CSG.Vector2D.fromAngle(angle).times(this.rootRadius));
-		}
-		var rootcircle = new CSG.Polygon2D(points).extrude({offset: [0, 0, this.thickness]});
+		var rootcircle = createBaseCirclePolygon(this.teethNumber, angularToothWidthBase, this.rootRadius).extrude({offset: [0, 0, this.thickness]});
 
 		var gear = rootcircle.union(teeth);
 		var result;
