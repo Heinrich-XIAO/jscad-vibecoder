@@ -13,7 +13,7 @@ const STORAGE_KEY = "openmech-openrouter";
 
 const DEFAULT_SETTINGS: OpenRouterSettings = {
   apiKey: "",
-  model: "z-ai/glm-5",
+  model: "google/gemini-3-flash-preview|reasoning=high",
   maxTokens: 4096,
   temperature: 0.3,
 };

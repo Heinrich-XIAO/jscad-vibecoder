@@ -15,7 +15,7 @@ export const generateInputSchema = z.object({
     })
     .optional(),
   openRouterApiKey: z.string().optional(),
-  model: z.string().default("z-ai/glm-5"),
+  model: z.string().default("google/gemini-3-flash-preview|reasoning=high"),
   maxIterations: z.number().default(5),
 });
 
