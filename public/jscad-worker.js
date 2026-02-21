@@ -178,7 +178,19 @@ self.onmessage = function(e) {
       
       // Execute main
       const result = main(parameters || {});
-      const geometries = Array.isArray(result) ? result : [result];
+      if (!Array.isArray(result)) {
+        throw new Error('main() must return an array of geometry objects, even when there is only one object.');
+      }
+
+      if (result.length === 0) {
+        throw new Error('main() returned an empty array. Return at least one geometry object.');
+      }
+
+      const geometries = result;
+      const invalidIndex = geometries.findIndex((item) => !item || typeof item !== 'object');
+      if (invalidIndex !== -1) {
+        throw new Error('main() array contains an invalid geometry at index ' + invalidIndex + '.');
+      }
       
       self.postMessage({ 
         type: 'result', 

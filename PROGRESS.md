@@ -1,6 +1,6 @@
 # OpenMech - Development Progress
 
-**Last Updated:** 2026-02-20  
+**Last Updated:** 2026-02-21  
 **Current Status:** 95% Complete - Production Ready 🚀
 
 ---
@@ -72,6 +72,7 @@
   - `render_preview` - Preview generation
   - `calculate` - Math calculations for dimensions/angles
 - ✅ **Runtime JSCAD Check After AI Edits** - Auto-runs JSCAD after edit/write tool calls using parameter defaults and reports errors
+- ✅ **Array-Only main() Contract** - System prompt and runtime evaluators now enforce `main()` returning an array of geometry objects (including single-shape models)
 
 ---
 

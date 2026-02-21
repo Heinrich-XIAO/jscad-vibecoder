@@ -896,7 +896,7 @@ function buildSystemPrompt(
 JSCAD scripts must export a \`main\` function:
 \`\`\`js
 const { cuboid } = require('@jscad/modeling').primitives
-const main = () => { return cuboid({ size: [10, 10, 10] }) }
+const main = () => { return [cuboid({ size: [10, 10, 10] })] }
 module.exports = { main }
 \`\`\`
 
@@ -904,7 +904,7 @@ Good write_code output (non-parametric):
 \`\`\`js
 const { cuboid } = require('@jscad/modeling').primitives
 function main() {
-  return cuboid({ size: [20, 20, 10] })
+  return [cuboid({ size: [20, 20, 10] })]
 }
 module.exports = { main }
 \`\`\`
@@ -923,7 +923,7 @@ function getParameterDefinitions() {
 }
 function main(params) {
   const { width = 20, depth = 20, height = 10 } = params || {}
-  return cuboid({ size: [width, depth, height] })
+  return [cuboid({ size: [width, depth, height] })]
 }
 module.exports = { main, getParameterDefinitions }
 \`\`\`
@@ -936,7 +936,7 @@ const getParameterDefinitions = () => [
 ]
 const main = (params) => {
   const { radius = 10, segments = 32 } = params || {}
-  return sphere({ radius, segments })
+  return [sphere({ radius, segments })]
 }
 module.exports = { main, getParameterDefinitions }
 \`\`\`
@@ -947,7 +947,7 @@ const getParameterDefinitions = () => [
 ]
 const main = (params) => {
   const { width = 20, height = 5 } = params || {}
-  return roundedCylinder({ radius: width / 2, height, roundRadius: 1, segments: 32 })
+  return [roundedCylinder({ radius: width / 2, height, roundRadius: 1, segments: 32 })]
 }
 module.exports = { main, getParameterDefinitions }
 \`\`\`
@@ -990,14 +990,14 @@ module.exports = { main, getParameterDefinitions }
   - This helper is diameter-first and should prioritize matching the requested diameter.
   - Defaults: thickness = 8mm, boreDiameter = 6mm, module = 1mm, pressureAngle = 20deg.
   - Use window.jscad.tspi.involuteGear(printerSettings, params) only for advanced/explicit parameterizations.
-  - ALWAYS wrap the return value with unwrap(): return unwrap(gear.getModel()).
+  - ALWAYS wrap the return value with unwrap(), then return an array: return [unwrap(gear.getModel())].
   - The unwrap() function is provided by the v1 compat layer and strips non-serializable methods.
   - Minimal example (use param defaults and define params via getParameterDefinitions):
     include('/jscad-libs/mechanics/gears.jscad')
     function main(params) {
       const printerSettings = { scale: 1, correctionInsideDiameter: 0, correctionOutsideDiameter: 0, correctionInsideDiameterMoving: 0, correctionOutsideDiameterMoving: 0, resolutionCircle: 360 }
       const gear = window.jscad.tspi.gear(printerSettings, 40, 8, 6, 1, 20)
-      return unwrap(gear.getModel())
+      return [unwrap(gear.getModel())]
     }
 
 - Racks: use the new library instead of constructing a straight rack from scratch.
@@ -1005,7 +1005,7 @@ module.exports = { main, getParameterDefinitions }
   - Prefer window.jscad.tspi.rack(printerSettings, length, thickness, module, teethNumber, pressureAngle, clearance, backHeight) to control overall length and tooth count.
   - Defaults: length = 100mm (when length is supplied), thickness = 8mm, module = 1mm, teethNumber = 20, pressureAngle = 20deg, clearance = 0mm, backHeight = 2mm.
   - Supplying a positive length lets the helper compute a matching tooth count; omit length to fix the count via teethNumber.
-  - ALWAYS wrap the return value with unwrap(): return unwrap(rack.getModel()).
+  - ALWAYS wrap the return value with unwrap(), then return an array: return [unwrap(rack.getModel())].
 
 Good write_code output (gear library):
 \`\`\`js
@@ -1030,7 +1030,7 @@ function main(params) {
     resolutionCircle: 360,
   }
   const gear = window.jscad.tspi.gear(printerSettings, diameter, thickness, boreDiameter, module, pressureAngle)
-  return unwrap(gear.getModel())
+  return [unwrap(gear.getModel())]
 }
 module.exports = { main, getParameterDefinitions }
 \`\`\`
@@ -1060,7 +1060,7 @@ function main(params) {
     resolutionCircle: 360,
   }
   const rack = window.jscad.tspi.rack(printerSettings, length, thickness, module, teethNumber, pressureAngle, clearance, backHeight)
-  return unwrap(rack.getModel())
+  return [unwrap(rack.getModel())]
 }
 module.exports = { main, getParameterDefinitions }
 \`\`\`
@@ -1073,6 +1073,7 @@ module.exports = { main, getParameterDefinitions }
 
 ## Important Rules
 - Always use require() syntax for JSCAD imports (not ES6 import)
+- main() MUST return an array of geometry objects. Even for one shape, return [shape].
 - All measurements are in millimeters (mm) by default
 - Use segments: 32 for smooth curves (default is often too low)
 - Shapes are always CENTERED at 0,0,0 before translation; do NOT place shapes with a corner at the origin
@@ -1581,7 +1582,29 @@ async function runJscadRuntime(
       }
     }
 
-    exports.main(runtimeParams);
+    const mainResult = exports.main(runtimeParams);
+    if (!Array.isArray(mainResult)) {
+      return {
+        ok: false,
+        error:
+          "main() must return an array of geometry objects, even when returning a single object.",
+      };
+    }
+    if (mainResult.length === 0) {
+      return {
+        ok: false,
+        error: "main() returned an empty array. Return at least one geometry object.",
+      };
+    }
+    const hasInvalidGeometry = mainResult.some(
+      (item) => !item || typeof item !== "object"
+    );
+    if (hasInvalidGeometry) {
+      return {
+        ok: false,
+        error: "main() array contains invalid entries. Each entry must be a geometry object.",
+      };
+    }
     return { ok: true };
   } catch (error) {
     return {
