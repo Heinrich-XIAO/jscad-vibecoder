@@ -4,6 +4,41 @@ require('/jscad-libs/compat/v1.js');
 if(typeof window.jscad !== 'object') { window.jscad = new Object(); }
 if(typeof window.jscad.tspi !== 'object') { window.jscad.tspi = new Object(); }
 
+function createRackToothPolygon(pitch, addendum, dedendum, pressureAngle, resolution) {
+	var points = [];
+	var paRad = pressureAngle * Math.PI / 180;
+	var toothHalfThicknessAtPitch = pitch / 4.0;
+	
+	// Left involute curve (from root to tip)
+	for(var i = 0; i <= resolution; i++) {
+		var t = i / resolution;
+		var y = -dedendum + t * (addendum + dedendum);
+		// Involute-like offset: at pitch line (y=0), slope is pressureAngle
+		// The offset from the vertical line follows an involute approximation
+		var invOffset = y * Math.tan(paRad);
+		// Add slight curvature to match gear appearance
+		var curvatureCorrection = 0.15 * (y * y / (addendum + dedendum)) * Math.tan(paRad);
+		var x = -toothHalfThicknessAtPitch - invOffset + curvatureCorrection;
+		points.push(new CSG.Vector2D(x, y));
+	}
+	
+	// Top tip
+	points.push(new CSG.Vector2D(-toothHalfThicknessAtPitch + addendum * Math.tan(paRad), addendum));
+	points.push(new CSG.Vector2D(toothHalfThicknessAtPitch - addendum * Math.tan(paRad), addendum));
+	
+	// Right involute curve (from tip to root)
+	for(var i = 0; i <= resolution; i++) {
+		var t = 1 - (i / resolution);
+		var y = -dedendum + t * (addendum + dedendum);
+		var invOffset = y * Math.tan(paRad);
+		var curvatureCorrection = 0.15 * (y * y / (addendum + dedendum)) * Math.tan(paRad);
+		var x = toothHalfThicknessAtPitch + invOffset - curvatureCorrection;
+		points.push(new CSG.Vector2D(x, y));
+	}
+	
+	return new CSG.Polygon2D(points);
+}
+
 window.jscad.tspi.involuteRack = function(printer, params) {
 	params = params || {};
 	printer = printer || {};
@@ -56,30 +91,11 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 	this.dedendum = this.addendum + this.clearance;
 
 	this.getModel = function() {
-		var paRad = this.pressureAngle * Math.PI / 180;
 		var pitch = this.circularPitch;
+		var resolution = 8;
 		
-		// Trapezoidal tooth profile
-		// Width at pitch line is pitch/2
-		var dx_top = this.addendum * Math.tan(paRad);
-		var dx_bottom = this.dedendum * Math.tan(paRad);
-		var toothHalfThickness = pitch / 4.0;
+		var singleTooth = createRackToothPolygon(pitch, this.addendum, this.dedendum, this.pressureAngle, resolution).extrude({ offset: [0, 0, this.thickness] });
 
-		var outlinePoints = [];
-		// We define one tooth centered at x=0
-		// Bottom left
-		outlinePoints.push([ -toothHalfThickness - dx_bottom, -this.dedendum ]);
-		// Top left
-		outlinePoints.push([ -toothHalfThickness + dx_top, this.addendum ]);
-		// Top right
-		outlinePoints.push([ toothHalfThickness - dx_top, this.addendum ]);
-		// Bottom right
-		outlinePoints.push([ toothHalfThickness + dx_bottom, -this.dedendum ]);
-
-		var toothPolygon = new CSG.Polygon2D(outlinePoints.map(p => new CSG.Vector2D(p[0], p[1])));
-		var singleTooth = toothPolygon.extrude({ offset: [0, 0, this.thickness] });
-
-		// Base/Backing bar
 		var baseWidth = this.length;
 		var baseHeight = this.backHeight > 0 ? this.backHeight : this.module * 2;
 		var basePoints = [
