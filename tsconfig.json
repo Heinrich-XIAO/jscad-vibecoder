@@ -24,13 +24,14 @@
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "next.config.ts",
+    "tsslint.config.ts",
+    "proxy.ts",
+    "src/**/*",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts",
     "convex/_generated/**/*.ts",
     "convex/_generated/**/*.d.ts"
   ],
-  "exclude": ["node_modules", "convex/**/*.ts", "!convex/_generated/**/*.ts"]
+  "exclude": ["node_modules"]
 }
