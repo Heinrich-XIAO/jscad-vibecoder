@@ -52,6 +52,7 @@
 - ✅ **Auto Project Naming** - Default project names are replaced using the first chat prompt
 - ✅ **AI Response Retry Button** - Retry the last user prompt directly from each assistant message
 - ✅ **Editor Runtime Error Diagnostics** - JSCAD runtime errors now highlight the failing code line and include an expandable stack trace panel
+- ✅ **extrudeFromSlices Error Hinting** - Degenerate slice plane errors now show actionable guidance instead of a cryptic `reading '0'` runtime message
 
 ### AI Features
 - ✅ **15 AI Tools** - Full tool system implemented:

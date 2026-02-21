@@ -109,6 +109,33 @@ const parseErrorLocation = (value) => {
   return {};
 };
 
+const formatRuntimeError = (value) => {
+  const normalizedError = value instanceof Error ? value : new Error(String(value));
+  const rawMessage = normalizedError.message || String(value);
+  const stackText = normalizedError.stack || '';
+  let message = rawMessage;
+
+  const isExtrudeFromSlicesPlaneError =
+    rawMessage.includes("Cannot read properties of undefined (reading '0')") &&
+    /calculatePlane/.test(stackText) &&
+    /extrudeFromSlices/.test(stackText);
+
+  if (isExtrudeFromSlicesPlaneError) {
+    message = [
+      'Invalid slice generated for extrudeFromSlices().',
+      'One of the generated slices is degenerate (duplicate or invalid points), so JSCAD cannot calculate a plane.',
+      'Ensure your callback returns a valid slice with non-zero edges for capped start/end slices.',
+      'Typical fixes: remove duplicate consecutive points, avoid zero-scale transforms, and only return null when capStart/capEnd are disabled for skipped ends.',
+    ].join(' ');
+  }
+
+  return {
+    normalizedError,
+    message,
+    location: parseErrorLocation(normalizedError),
+  };
+};
+
 const normalizeRemoteUrl = (url) => {
   const match = url.match(/^https?:\\/\\/github\\.com\\/([^/]+)\\/([^/]+)\\/blob\\/([^/]+)\\/(.+)$/);
   if (match) {
@@ -230,15 +257,14 @@ self.onmessage = function(e) {
         throw new Error('No main() exported');
       }
     } catch (error) {
-      const normalizedError = error instanceof Error ? error : new Error(String(error));
-      const location = parseErrorLocation(normalizedError);
+      const runtimeError = formatRuntimeError(error);
       self.postMessage({
         type: 'error',
         error: {
-          message: normalizedError.message || String(error),
-          stack: normalizedError.stack,
-          line: location.line,
-          column: location.column,
+          message: runtimeError.message,
+          stack: runtimeError.normalizedError.stack,
+          line: runtimeError.location.line,
+          column: runtimeError.location.column,
         },
       });
     }

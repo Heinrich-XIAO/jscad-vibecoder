@@ -878,6 +878,9 @@ function buildSystemPrompt(
 - extrudeLinear({ height }, 2dGeometry)
 - extrudeRotate({ angle, segments }, 2dGeometry)
 - extrudeRectangular({ size, height }, 2dGeometry)
+- extrudeFromSlices({ numberOfSlices, capStart, capEnd, callback }, base)
+  - callback MUST return valid slice objects (or null to skip) with non-degenerate edges
+  - avoid duplicate consecutive points / zero-scale slices, or JSCAD may throw calculatePlane errors
 
 ### Expansions (require('@jscad/modeling').expansions)
 - expand({ delta, corners: 'round' }, geometry)
