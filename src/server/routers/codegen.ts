@@ -909,11 +909,15 @@ function buildToolDefinitions() {
             },
             targetPitchRadius: {
               type: "number",
-              description: "For 'pitch_aligned': pitch circle radius of target gear (module * teeth / 2)",
+              description: "For 'pitch_aligned': pitch radius of target geometry. Use module * teeth / 2 for a gear, or 0 for a rack.",
             },
             referencePitchRadius: {
               type: "number",
-              description: "For 'pitch_aligned': pitch circle radius of reference gear, or 0 if reference is a rack",
+              description: "For 'pitch_aligned': pitch radius of reference geometry. Use module * teeth / 2 for a gear, or 0 for a rack.",
+            },
+            targetIsRack: {
+              type: "boolean",
+              description: "For 'pitch_aligned': set true if target is a rack",
             },
             referenceIsRack: {
               type: "boolean",
@@ -1138,6 +1142,10 @@ const rack = unwrap(window.jscad.tspi.rack(printerSettings, 100, 8, 1, 20, 20, 0
 // Tool call: position_relative(target="gear", reference="rack", alignment="pitch_aligned", 
 //             targetPitchRadius=10, referenceIsRack=true, pitchAxis="y", gap=0.1)
 // Returns: translate([0, 10.1, 0], gear)
+// If you need to move the rack instead of the gear:
+// position_relative(target="rack", reference="gear", alignment="pitch_aligned",
+//                   targetIsRack=true, targetPitchRadius=0, referencePitchRadius=10, pitchAxis="y", gap=0.1)
+// Returns: translate([0, -10.1, 0], rack)
 
 // Step 3: Apply the returned translate expression
 const positionedGear = translate([0, 10.1, 0], gear)
@@ -1558,6 +1566,7 @@ function executeToolCall(
       const gap = (args.gap as number) ?? 0;
       const targetPitchRadius = args.targetPitchRadius as number | undefined;
       const referencePitchRadius = args.referencePitchRadius as number | undefined;
+      const targetIsRack = (args.targetIsRack as boolean) ?? false;
       const referenceIsRack = (args.referenceIsRack as boolean) ?? false;
       const pitchAxis = ((args.pitchAxis as string | undefined) ?? "y") === "x" ? "x" : "y";
 
@@ -1593,18 +1602,34 @@ function executeToolCall(
             return {
               output: {
                 success: false,
-                error: "pitch_aligned requires targetPitchRadius (module * teeth / 2 for the gear to position)",
+                error: "pitch_aligned requires targetPitchRadius (gear: module * teeth / 2, rack: 0)",
               },
             };
           }
 
-          if (referenceIsRack) {
-            const distance = targetPitchRadius + gap;
+          const isGearRack = (targetIsRack && !referenceIsRack) || (!targetIsRack && referenceIsRack);
+
+          if (isGearRack) {
+            const gearRadius = targetIsRack ? (referencePitchRadius ?? 0) : targetPitchRadius;
+            if (gearRadius <= 0) {
+              return {
+                output: {
+                  success: false,
+                  error:
+                    "gear-rack pitch_aligned requires the gear pitch radius. If targetIsRack=true, provide referencePitchRadius for the gear.",
+                },
+              };
+            }
+
+            const distance = gearRadius + gap;
+            const signedDistance = targetIsRack ? -distance : distance;
             translateExpr =
               pitchAxis === "x"
-                ? `translate([${distance.toFixed(3)}, 0, 0], ${target})`
-                : `translate([0, ${distance.toFixed(3)}, 0], ${target})`;
-            explanation = `Position gear ${target} (pitch radius ${targetPitchRadius}mm) to mesh with rack ${reference}. Pitch circle touches pitch line at distance ${distance.toFixed(3)}mm along ${pitchAxis.toUpperCase()} axis.`;
+                ? `translate([${signedDistance.toFixed(3)}, 0, 0], ${target})`
+                : `translate([0, ${signedDistance.toFixed(3)}, 0], ${target})`;
+            explanation = targetIsRack
+              ? `Position rack ${target} below/behind gear ${reference} by ${distance.toFixed(3)}mm so the gear pitch circle touches the rack pitch line along ${pitchAxis.toUpperCase()} axis.`
+              : `Position gear ${target} above/in front of rack ${reference} by ${distance.toFixed(3)}mm so the gear pitch circle touches the rack pitch line along ${pitchAxis.toUpperCase()} axis.`;
           } else if (referencePitchRadius !== undefined) {
             const centerDistance = targetPitchRadius + referencePitchRadius + gap;
             translateExpr =
@@ -1616,7 +1641,8 @@ function executeToolCall(
             return {
               output: {
                 success: false,
-                error: "pitch_aligned requires either referencePitchRadius (for gear-gear meshing) or referenceIsRack=true (for gear-rack meshing)",
+                error:
+                  "pitch_aligned requires either gear-gear radii (targetPitchRadius + referencePitchRadius) or one side marked as rack (targetIsRack/referenceIsRack).",
               },
             };
           }
@@ -1639,6 +1665,7 @@ function executeToolCall(
           alignment,
           direction,
           gap,
+          targetIsRack,
           pitchAxis,
           translateExpression: translateExpr,
           explanation,
