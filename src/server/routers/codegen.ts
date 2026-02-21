@@ -1023,8 +1023,8 @@ module.exports = { main, getParameterDefinitions }
 
 - Racks: use the new library instead of constructing a straight rack from scratch.
   - include('/jscad-libs/mechanics/racks.jscad') (loads v1 compat automatically).
-  - Prefer window.jscad.tspi.rack(printerSettings, length, thickness, module, teethNumber, pressureAngle, clearance) to control overall length and tooth count.
-  - Defaults: length = 100mm (when length is supplied), thickness = 8mm, module = 1mm, teethNumber = 20, pressureAngle = 20deg, clearance = 0mm.
+  - Prefer window.jscad.tspi.rack(printerSettings, length, thickness, module, teethNumber, pressureAngle, clearance, backHeight) to control overall length and tooth count.
+  - Defaults: length = 100mm (when length is supplied), thickness = 8mm, module = 1mm, teethNumber = 20, pressureAngle = 20deg, clearance = 0mm, backHeight = 2mm.
   - Supplying a positive length lets the helper compute a matching tooth count; omit length to fix the count via teethNumber.
   - ALWAYS wrap the return value with unwrap(): return unwrap(rack.getModel()).
 
@@ -1067,10 +1067,11 @@ function getParameterDefinitions() {
     { name: 'teethNumber', type: 'int', initial: 20, caption: 'Teeth count' },
     { name: 'pressureAngle', type: 'float', initial: 20, caption: 'Pressure angle' },
     { name: 'clearance', type: 'float', initial: 0, caption: 'Clearance' },
+    { name: 'backHeight', type: 'float', initial: 2, caption: 'Back height' },
   ]
 }
 function main(params) {
-  const { length = 100, thickness = 8, module = 1, teethNumber = 20, pressureAngle = 20, clearance = 0 } = params || {}
+  const { length = 100, thickness = 8, module = 1, teethNumber = 20, pressureAngle = 20, clearance = 0, backHeight = 2 } = params || {}
   const printerSettings = {
     scale: 1,
     correctionInsideDiameter: 0,
@@ -1079,7 +1080,7 @@ function main(params) {
     correctionOutsideDiameterMoving: 0,
     resolutionCircle: 360,
   }
-  const rack = window.jscad.tspi.rack(printerSettings, length, thickness, module, teethNumber, pressureAngle, clearance)
+  const rack = window.jscad.tspi.rack(printerSettings, length, thickness, module, teethNumber, pressureAngle, clearance, backHeight)
   return unwrap(rack.getModel())
 }
 module.exports = { main, getParameterDefinitions }
