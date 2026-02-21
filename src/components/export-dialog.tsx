@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { ThumbnailPreview } from "./thumbnail-preview";
+import { polygonVertices } from "@/lib/jscad-geometry";
 
 interface ExportDialogProps {
   isOpen: boolean;
@@ -26,11 +27,12 @@ function serializeOBJ(geometries: unknown[]): string {
     const g = geom as Record<string, unknown>;
     
     if (g.polygons && Array.isArray(g.polygons)) {
-      for (const polygon of g.polygons as Array<{ vertices: number[][] }>) {
-        if (!polygon.vertices || polygon.vertices.length < 3) continue;
+      for (const polygon of g.polygons as Array<Record<string, unknown>>) {
+        const polygonVerts = polygonVertices(polygon);
+        if (polygonVerts.length < 3) continue;
 
         const faceIndices: number[] = [];
-        for (const vertex of polygon.vertices) {
+        for (const vertex of polygonVerts) {
           vertices.push([vertex[0], vertex[1], vertex[2]]);
           faceIndices.push(vertexOffset++);
         }

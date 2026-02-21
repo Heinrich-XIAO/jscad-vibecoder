@@ -1,3 +1,5 @@
+import { polygonVertices, Vec3 } from "@/lib/jscad-geometry"
+
 /**
  * Generate a thumbnail preview from JSCAD geometry
  * Uses a canvas to render a simplified isometric view
@@ -64,9 +66,10 @@ export async function generateThumbnail(
   for (const geom of geometry) {
     const g = geom as Record<string, unknown>;
     if (g.polygons && Array.isArray(g.polygons)) {
-      for (const polygon of g.polygons as Array<{ vertices: number[][] }>) {
-        if (!polygon.vertices) continue;
-        for (const v of polygon.vertices) {
+      for (const polygon of g.polygons as Array<Record<string, unknown>>) {
+        const vertices = polygonVertices(polygon);
+        if (!vertices.length) continue;
+        for (const v of vertices) {
           minX = Math.min(minX, v[0]);
           maxX = Math.max(maxX, v[0]);
           minY = Math.min(minY, v[1]);
@@ -95,42 +98,42 @@ export async function generateThumbnail(
     const g = geom as Record<string, unknown>;
 
     if (g.polygons && Array.isArray(g.polygons)) {
-      // Sort polygons by depth (painter's algorithm)
-      const polygons = (g.polygons as Array<{ vertices: number[][] }>).filter(
-        (p) => p.vertices && p.vertices.length >= 3
-      );
+      const polygonsWithDepth = (g.polygons as Array<Record<string, unknown>>)
+        .map((polygon) => {
+          const vertices = polygonVertices(polygon);
+          if (vertices.length < 3) return null;
 
-      // Calculate depth for each polygon
-      const polygonsWithDepth = polygons.map((polygon) => {
-        const centroid = polygon.vertices.reduce(
-          (acc, v) => [acc[0] + v[0], acc[1] + v[1], acc[2] + v[2]],
-          [0, 0, 0]
+          const centroid = vertices.reduce(
+            (acc, v) => [acc[0] + v[0], acc[1] + v[1], acc[2] + v[2]],
+            [0, 0, 0]
+          );
+          centroid[0] /= vertices.length;
+          centroid[1] /= vertices.length;
+          centroid[2] /= vertices.length;
+
+          const projected = project(
+            (centroid[0] - offsetX) * autoScale,
+            (centroid[1] - offsetY) * autoScale,
+            (centroid[2] - offsetZ) * autoScale
+          );
+
+          return { vertices, depth: projected.y };
+        })
+        .filter(
+          (entry): entry is { vertices: Vec3[]; depth: number } => Boolean(entry)
         );
-        centroid[0] /= polygon.vertices.length;
-        centroid[1] /= polygon.vertices.length;
-        centroid[2] /= polygon.vertices.length;
-
-        // Project centroid for depth calculation
-        const projected = project(
-          (centroid[0] - offsetX) * autoScale,
-          (centroid[1] - offsetY) * autoScale,
-          (centroid[2] - offsetZ) * autoScale
-        );
-
-        return { polygon, depth: projected.y };
-      });
 
       // Sort by depth (back to front)
       polygonsWithDepth.sort((a, b) => b.depth - a.depth);
 
       // Draw each polygon
-      for (const { polygon } of polygonsWithDepth) {
+      for (const { vertices } of polygonsWithDepth) {
         ctx.beginPath();
 
         // Calculate face normal for lighting
-        const v0 = polygon.vertices[0];
-        const v1 = polygon.vertices[1];
-        const v2 = polygon.vertices[2];
+        const v0 = vertices[0];
+        const v1 = vertices[1];
+        const v2 = vertices[2];
 
         const normal = [
           (v1[1] - v0[1]) * (v2[2] - v0[2]) - (v1[2] - v0[2]) * (v2[1] - v0[1]),
@@ -166,8 +169,8 @@ export async function generateThumbnail(
         ctx.strokeStyle = `rgba(${r + 20}, ${g + 20}, ${b}, 0.9)`;
 
         // Draw polygon
-        for (let i = 0; i < polygon.vertices.length; i++) {
-          const v = polygon.vertices[i];
+        for (let i = 0; i < vertices.length; i++) {
+          const v = vertices[i];
           const p = project(
             (v[0] - offsetX) * autoScale,
             (v[1] - offsetY) * autoScale,

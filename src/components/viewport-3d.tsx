@@ -3,6 +3,7 @@
 import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from "react";
 import { useTheme } from "@/lib/theme-provider";
 import * as THREE from "three";
+import { polygonVertices } from "@/lib/jscad-geometry";
 
 export interface Viewport3DHandle {
   rotate: (dx: number, dy: number) => void;
@@ -25,27 +26,28 @@ function jscadToThreeGeometry(geom: unknown): THREE.BufferGeometry | null {
     return null;
   }
   
-  const polygons = g.polygons as Array<{ vertices: number[][] }>;
+  const polygons = g.polygons as Array<Record<string, unknown>>;
   const vertices: number[] = [];
   const indices: number[] = [];
   let vertexIndex = 0;
   
   for (const polygon of polygons) {
-    if (!polygon.vertices || polygon.vertices.length < 3) continue;
+    const polyVertices = polygonVertices(polygon);
+    if (polyVertices.length < 3) continue;
     
     // Triangulate polygon using fan triangulation
     const baseIndex = vertexIndex;
     
-    for (const v of polygon.vertices) {
+    for (const v of polyVertices) {
       vertices.push(v[0], v[1], v[2]);
     }
     
     // Create triangles from the polygon fan
-    for (let i = 1; i < polygon.vertices.length - 1; i++) {
+    for (let i = 1; i < polyVertices.length - 1; i++) {
       indices.push(baseIndex, baseIndex + i, baseIndex + i + 1);
     }
     
-    vertexIndex += polygon.vertices.length;
+    vertexIndex += polyVertices.length;
   }
   
   const geometry = new THREE.BufferGeometry();

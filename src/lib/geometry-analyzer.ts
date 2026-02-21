@@ -1,3 +1,5 @@
+import { polygonVertices } from "@/lib/jscad-geometry"
+
 /**
  * Geometry analysis utilities using JSCAD measurement functions.
  * Calculates bounding boxes, volumes, surface areas, and printability metrics.
@@ -144,32 +146,32 @@ export async function analyzePrintability(geometries: unknown[]): Promise<Printa
       const g = geom as Record<string, unknown>;
 
       // Check for polygons (manifold check)
-      if (g.polygons && Array.isArray(g.polygons)) {
-        // Count edges to detect non-manifold geometry
-        const edgeCount = new Map<string, number>();
-        
-        for (const polygon of g.polygons as Array<{ vertices: number[][] }>) {
-          if (!polygon.vertices || polygon.vertices.length < 3) {
-            isManifold = false;
-            warnings.push("Found degenerate polygon (less than 3 vertices)");
-            continue;
-          }
+        if (g.polygons && Array.isArray(g.polygons)) {
+          // Count edges to detect non-manifold geometry
+          const edgeCount = new Map<string, number>();
+          
+          for (const polygon of g.polygons as Array<Record<string, unknown>>) {
+            const verts = polygonVertices(polygon);
+            if (verts.length < 3) {
+              isManifold = false;
+              warnings.push("Found degenerate polygon (less than 3 vertices)");
+              continue;
+            }
 
-          // Check polygon edges
-          const verts = polygon.vertices;
-          for (let i = 0; i < verts.length; i++) {
-            const v1 = verts[i];
-            const v2 = verts[(i + 1) % verts.length];
-            const edgeKey = `${v1.join(",")}-${v2.join(",")}`;
-            const reverseKey = `${v2.join(",")}-${v1.join(",")}`;
-            
-            if (edgeCount.has(reverseKey)) {
-              edgeCount.set(reverseKey, (edgeCount.get(reverseKey) || 0) + 1);
-            } else {
-              edgeCount.set(edgeKey, (edgeCount.get(edgeKey) || 0) + 1);
+            // Check polygon edges
+            for (let i = 0; i < verts.length; i++) {
+              const v1 = verts[i];
+              const v2 = verts[(i + 1) % verts.length];
+              const edgeKey = `${v1.join(",")}-${v2.join(",")}`;
+              const reverseKey = `${v2.join(",")}-${v1.join(",")}`;
+              
+              if (edgeCount.has(reverseKey)) {
+                edgeCount.set(reverseKey, (edgeCount.get(reverseKey) || 0) + 1);
+              } else {
+                edgeCount.set(edgeKey, (edgeCount.get(edgeKey) || 0) + 1);
+              }
             }
           }
-        }
 
         // Check for edges used more than twice (non-manifold)
         for (const [, count] of edgeCount) {
