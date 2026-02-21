@@ -14,7 +14,7 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 		{ name: 'clearance',			type: 'number',					default: 0				},
 		{ name: 'thickness',			type: 'number',					default: -1				},
 		{ name: 'centerholeRadius',		type: 'number',					default: 0				},
-		{ name: 'resolution',			type: 'number',					default: 16				},
+		{ name: 'resolution',			type: 'number',					default: 5				},
 		{ name: 'inclination',			type: 'number',					default: 0				},
 		{ name: 'inclinationSteps',		type: 'number',					default: 25				},
 		{ name: 'doubleHelical',		type: 'boolean',				default: false			},
@@ -134,7 +134,12 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 		var tangentialVector;
 		var point;
 
-		var points = [ ];
+		var points = [new CSG.Vector2D(0,0)];
+
+		var tangentAtPitchCircle = Math.sqrt(this.pitchRadius*this.pitchRadius - this.baseCircleRadius*this.baseCircleRadius);
+		var angleAtPitchCircle = tangentAtPitchCircle / this.baseCircleRadius;
+		var angularDifference = angleAtPitchCircle - Math.atan(angleAtPitchCircle);
+		var angularToothWidthBase = Math.PI / this.teethNumber + 2 * angularDifference;
 
 		for(var i = 0; i <= this.resolution; i++) {
 			currentAngle = maxAngle * i / this.resolution;
@@ -143,24 +148,13 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 			radialVector = CSG.Vector2D.fromAngle(currentAngle);
 			tangentialVector = radialVector.normal();
 			point = radialVector.times(this.baseCircleRadius).plus(tangentialVector.times(currentTangentLength));
-
-			points.push(point);
-		}
-
-		var tangentAtPitchCircle = Math.sqrt(this.pitchRadius*this.pitchRadius - this.baseCircleRadius*this.baseCircleRadius);
-		var angleAtPitchCircle = tangentAtPitchCircle / this.baseCircleRadius;
-		var angularDifference = angleAtPitchCircle - Math.atan(angleAtPitchCircle);
-		var angularToothWidthBase = Math.PI / this.teethNumber + 2 * angularDifference;
-
-		for(i = this.resolution; i >= 0; i--) {
-			currentAngle = maxAngle * i / this.resolution;
-			currentTangentLength = currentAngle * this.baseCircleRadius;
+			points[i + 1] = point;
 
 			radialVector = CSG.Vector2D.fromAngle(angularToothWidthBase - currentAngle);
 			tangentialVector = radialVector.normal().negated();
 			point = radialVector.times(this.baseCircleRadius).plus(tangentialVector.times(currentTangentLength));
-			points.push(point);
-        }
+			points[2 * this.resolution + 2 - i] = point;
+		}
 
 		var singleTooth;
 
@@ -178,9 +172,10 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 		}
 
 		points = [];
-		var rootResolution = this.printer['resolutionCircle'];
-		for(i = 0; i < rootResolution; i++) {
-			angle = (2 * Math.PI * i) / rootResolution;
+		var toothAngle = 2 * Math.PI / this.teethNumber;
+		var toothCenterAngle = 0.5 * angularToothWidthBase;
+		for(i = 0; i < this.teethNumber; i++) {
+			angle = toothCenterAngle + i * toothAngle;
 			points.push(CSG.Vector2D.fromAngle(angle).times(this.rootRadius));
 		}
 		var rootcircle = new CSG.Polygon2D(points).extrude({offset: [0, 0, this.thickness]});
