@@ -98,11 +98,13 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 
 		var baseWidth = this.length;
 		var baseHeight = this.backHeight > 0 ? this.backHeight : this.module * 2;
+		var overlap = Math.max(0.01, this.module * 0.02);
+		var baseTop = -this.dedendum + overlap;
 		var basePoints = [
-			[-baseWidth / 2, -this.dedendum],
-			[baseWidth / 2, -this.dedendum],
-			[baseWidth / 2, -this.dedendum - baseHeight],
-			[-baseWidth / 2, -this.dedendum - baseHeight]
+			[-baseWidth / 2, baseTop],
+			[baseWidth / 2, baseTop],
+			[baseWidth / 2, baseTop - baseHeight],
+			[-baseWidth / 2, baseTop - baseHeight]
 		];
 		var basePolygon = new CSG.Polygon2D(basePoints.map(p => new CSG.Vector2D(p[0], p[1])));
 		var baseBar = basePolygon.extrude({ offset: [0, 0, this.thickness] });
