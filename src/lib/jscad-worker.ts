@@ -18,12 +18,19 @@ export interface WorkerResponse {
   type: "result" | "error" | "parameters";
   geometries?: unknown[];
   parameterDefinitions?: ParameterDefinition[];
-  error?: string;
+  error?: JscadExecutionError;
   metadata?: {
     boundingBox?: number[][];
     volume?: number;
     polygonCount?: number;
   };
+}
+
+export interface JscadExecutionError {
+  message: string;
+  stack?: string;
+  line?: number;
+  column?: number;
 }
 
 export interface ParameterDefinition {
@@ -38,13 +45,26 @@ export interface ParameterDefinition {
   captions?: string[];
 }
 
+class JscadWorkerError extends Error {
+  line?: number;
+  column?: number;
+
+  constructor(details: JscadExecutionError) {
+    super(details.message);
+    this.name = "JscadWorkerError";
+    this.stack = details.stack ?? this.stack;
+    this.line = details.line;
+    this.column = details.column;
+  }
+}
+
 /**
  * Creates and manages a JSCAD evaluation Web Worker.
  */
 export class JscadWorker {
   private worker: Worker | null = null;
   private pendingResolve: ((value: WorkerResponse) => void) | null = null;
-  private pendingReject: ((reason: Error) => void) | null = null;
+  private pendingReject: ((reason: JscadWorkerError) => void) | null = null;
 
   constructor() {
     this.initWorker();
@@ -66,6 +86,28 @@ self.window.location = { protocol: 'https:', origin: injectedBaseOrigin };
 const baseOrigin = injectedBaseOrigin || 'https://localhost';
 
 const remoteModuleCache = new Map();
+
+const parseErrorLocation = (value) => {
+  const text = [value?.stack, value?.message].filter(Boolean).join('\\n');
+  const patterns = [
+    /<anonymous>:(\\d+):(\\d+)/,
+    /eval at [^\\n]*<anonymous>:(\\d+):(\\d+)/,
+    /:(\\d+):(\\d+)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const line = Number(match[1]);
+      const column = Number(match[2]);
+      if (Number.isFinite(line) && line > 0 && Number.isFinite(column) && column > 0) {
+        return { line, column };
+      }
+    }
+  }
+
+  return {};
+};
 
 const normalizeRemoteUrl = (url) => {
   const match = url.match(/^https?:\\/\\/github\\.com\\/([^/]+)\\/([^/]+)\\/blob\\/([^/]+)\\/(.+)$/);
@@ -188,7 +230,17 @@ self.onmessage = function(e) {
         throw new Error('No main() exported');
       }
     } catch (error) {
-      self.postMessage({ type: 'error', error: error.message || String(error) });
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      const location = parseErrorLocation(normalizedError);
+      self.postMessage({
+        type: 'error',
+        error: {
+          message: normalizedError.message || String(error),
+          stack: normalizedError.stack,
+          line: location.line,
+          column: location.column,
+        },
+      });
     }
   }
 };
@@ -204,7 +256,7 @@ self.onmessage = function(e) {
     this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       if (e.data.type === "parameters") return;
       if (e.data.type === "error") {
-        this.pendingReject?.(new Error(e.data.error));
+        this.pendingReject?.(new JscadWorkerError(e.data.error ?? { message: "Unknown error" }));
       } else {
         this.pendingResolve?.(e.data);
       }
@@ -219,7 +271,7 @@ self.onmessage = function(e) {
   ): Promise<WorkerResponse> {
     return new Promise((resolve, reject) => {
       if (!this.worker) {
-        reject(new Error("Worker not initialized"));
+        reject(new JscadWorkerError({ message: "Worker not initialized" }));
         return;
       }
 
@@ -237,7 +289,7 @@ self.onmessage = function(e) {
       // Timeout after 30 seconds
       setTimeout(() => {
         if (this.pendingReject) {
-          this.pendingReject(new Error("JSCAD evaluation timed out (30s)"));
+          this.pendingReject(new JscadWorkerError({ message: "JSCAD evaluation timed out (30s)" }));
           this.pendingResolve = null;
           this.pendingReject = null;
           // Restart worker
@@ -268,9 +320,9 @@ export function useJscadWorker() {
   const execute = useCallback(async (
     code: string,
     parameters?: Record<string, unknown>
-  ): Promise<{ geometry?: unknown[]; error?: string }> => {
+  ): Promise<{ geometry?: unknown[]; error?: JscadExecutionError }> => {
     if (!workerRef.current) {
-      return { error: "Worker not initialized" };
+      return { error: { message: "Worker not initialized" } };
     }
 
     try {
@@ -280,7 +332,20 @@ export function useJscadWorker() {
       }
       return { geometry: result.geometries as unknown[] };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : "Unknown error" };
+      if (err instanceof JscadWorkerError) {
+        return {
+          error: {
+            message: err.message,
+            stack: err.stack,
+            line: err.line,
+            column: err.column,
+          },
+        };
+      }
+      if (err instanceof Error) {
+        return { error: { message: err.message, stack: err.stack } };
+      }
+      return { error: { message: "Unknown error" } };
     }
   }, []);
 

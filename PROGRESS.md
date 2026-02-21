@@ -51,6 +51,7 @@
 - ✅ **Streaming Tool + Assistant Feedback** - Chat shows live tool execution status, results, and assistant response during AI runs
 - ✅ **Auto Project Naming** - Default project names are replaced using the first chat prompt
 - ✅ **AI Response Retry Button** - Retry the last user prompt directly from each assistant message
+- ✅ **Editor Runtime Error Diagnostics** - JSCAD runtime errors now highlight the failing code line and include an expandable stack trace panel
 
 ### AI Features
 - ✅ **15 AI Tools** - Full tool system implemented:

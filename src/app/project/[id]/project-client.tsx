@@ -16,7 +16,7 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { GeometryInfo } from "@/components/geometry-info";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { extractParameters, type ExtractedParameter } from "@/lib/parameter-extractor";
-import { useJscadWorker } from "@/lib/jscad-worker";
+import { useJscadWorker, type JscadExecutionError } from "@/lib/jscad-worker";
 import { useKeyboardShortcuts, type KeyboardShortcut } from "@/lib/use-keyboard-shortcuts";
 import { useUndoRedo } from "@/lib/use-undo-redo";
 import { useAuth } from "@clerk/nextjs";
@@ -52,7 +52,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [parameters, setParameters] = useState<ParameterValues>({});
   const [parameterDefs, setParameterDefs] = useState<ExtractedParameter[]>([]);
   const [geometry, setGeometry] = useState<unknown[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<JscadExecutionError | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   
   // Undo/redo for code editor
@@ -153,7 +153,11 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         setGeometry(result.geometry);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(
+        err instanceof Error
+          ? { message: err.message, stack: err.stack }
+          : { message: "Unknown error" }
+      );
       setGeometry([]);
     } finally {
       setIsGenerating(false);

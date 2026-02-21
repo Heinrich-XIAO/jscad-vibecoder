@@ -74,3 +74,14 @@ body {
 * {
   border-color: var(--border);
 }
+
+.jscad-error-line-highlight {
+  background: color-mix(in srgb, #ef4444 15%, transparent);
+}
+
+.jscad-error-line-glyph {
+  background: #ef4444;
+  width: 6px !important;
+  margin-left: 4px;
+  border-radius: 9999px;
+}
