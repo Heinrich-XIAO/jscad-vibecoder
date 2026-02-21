@@ -1102,6 +1102,14 @@ module.exports = { main, getParameterDefinitions }
 
 ## Relative Positioning (IMPORTANT - Use Tools, Not Manual Calculations)
 
+### CRITICAL: Always Use Positioning Tools for Mechanical Elements
+When working with gears, racks, or other mechanical elements that mesh together:
+- **ALWAYS use position_relative with alignment="pitch_aligned"** - NEVER manually calculate translate() coordinates
+- **ALWAYS use check_alignment with checkType="pitch_mesh"** to verify proper meshing
+- **ALWAYS use measure_geometry with gearParams/rackParams** to get pitch circle/line info
+
+Manual positioning calculations for gears/racks are error-prone and will result in incorrect meshing. The tools calculate correct center distances based on pitch geometry.
+
 ### Positioning Geometries Relative to Each Other
 Instead of manually calculating translate([x,y,z]) coordinates, use the position_relative tool:
 
