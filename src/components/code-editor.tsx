@@ -71,7 +71,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     const normalized = source.toLowerCase();
     return normalized.includes("<anonymous>") || normalized.includes("anonymous") || normalized.includes("eval");
   };
-  const shouldHighlight = Boolean(errorLine && isUserCodeFrame(errorLocation?.source));
+  const shouldHighlight = false;
   const primaryMessage = error?.message?.split("\n")[0] ?? "";
   const stackText = error?.stack?.trim() ?? "";
   const hasStack = stackText.length > 0;
@@ -179,11 +179,6 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
               <div className="text-xs text-red-600 dark:text-red-400 font-mono break-words">
                 {primaryMessage}
               </div>
-              {errorLine && (
-                <div className="text-[11px] text-red-700/80 dark:text-red-300/80 font-mono mt-0.5">
-                  Line {errorLine}{errorColumn ? `:${errorColumn}` : ""}
-                </div>
-              )}
             </div>
           </div>
 
