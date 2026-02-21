@@ -14,7 +14,7 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 		{ name: 'clearance',			type: 'number',					default: 0				},
 		{ name: 'thickness',			type: 'number',					default: -1				},
 		{ name: 'centerholeRadius',		type: 'number',					default: 0				},
-		{ name: 'resolution',			type: 'number',					default: 5				},
+		{ name: 'resolution',			type: 'number',					default: 16				},
 		{ name: 'inclination',			type: 'number',					default: 0				},
 		{ name: 'inclinationSteps',		type: 'number',					default: 25				},
 		{ name: 'doubleHelical',		type: 'boolean',				default: false			},
@@ -113,7 +113,7 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 	this.baseCircleDiameter			= this.pitchDiameter * Math.cos(this.pressureAngle * Math.PI/180.0);
 	this.baseCircleRadius			= this.baseCircleDiameter / 2.0;
 	this.addendum					= this.module;
-	this.dedendum					= this.addendum - this.clearance;
+	this.dedendum					= this.addendum + this.clearance;
 	this.outsideDiameter			= this.pitchDiameter + 2*this.addendum;
 	this.outsideRadius				= this.outsideDiameter / 2.0;
 	this.rootDiameter				= this.pitchDiameter - 2*this.dedendum;
@@ -135,7 +135,6 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 		var point;
 
 		var points = [ ];
-		points.push(new CSG.Vector2D(0,0));
 
 		for(var i = 0; i <= this.resolution; i++) {
 			currentAngle = maxAngle * i / this.resolution;
@@ -179,10 +178,9 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 		}
 
 		points = [];
-		var toothAngle = 2 * Math.PI / this.teethNumber;
-		var toothCenterAngle = 0.5 * angularToothWidthBase;
-		for(i = 0; i < this.teethNumber; i++) {
-			angle = toothCenterAngle + i * toothAngle;
+		var rootResolution = this.printer['resolutionCircle'];
+		for(i = 0; i < rootResolution; i++) {
+			angle = (2 * Math.PI * i) / rootResolution;
 			points.push(CSG.Vector2D.fromAngle(angle).times(this.rootRadius));
 		}
 		var rootcircle = new CSG.Polygon2D(points).extrude({offset: [0, 0, this.thickness]});
