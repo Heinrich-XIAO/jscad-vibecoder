@@ -113,13 +113,13 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 		for(var i = 0; i < this.teethNumber; i++) {
 			var offset = (-this.length / 2.0) + (i + 0.5) * pitch;
 			var tooth = singleTooth.translate([offset, 0, 0]);
-			rackTeeth = rackTeeth ? rackTeeth.union(tooth) : tooth;
+			rackTeeth = rackTeeth ? union(rackTeeth, tooth) : tooth;
 		}
 
 		var translateOffset = [0, 0, -this.thickness / 2.0];
 		var shiftedBase = baseBar.translate(translateOffset);
 		if (rackTeeth) {
-			return [shiftedBase, rackTeeth.translate(translateOffset)];
+			return [booleans.intersect(shiftedBase, rackTeeth.translate(translateOffset))];
 		}
 		return [shiftedBase];
 	};

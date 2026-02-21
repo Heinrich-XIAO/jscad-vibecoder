@@ -257,6 +257,7 @@ const api = {
   rotate,
   scale,
   color,
+  booleans
 };
 
 // Helper to unwrap geometries before serialization (removes wrapper methods)
