@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
@@ -32,6 +32,9 @@ interface ProjectPageProps {
 export default function ProjectPage({ id }: ProjectPageProps) {
   const router = useRouter();
   const { userId } = useAuth();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const focusChatParam = searchParams.get("focusChat") === "1";
 
   const projectQueryArgs = useMemo(() => {
     if (!id || !userId) return "skip";
@@ -70,6 +73,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [showGeometryInfo, setShowGeometryInfo] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const hasAutoFocusedChatRef = useRef(false);
   const viewportRef = useRef<Viewport3DHandle>(null);
   const editorRef = useRef<CodeEditorHandle>(null);
   const parametersRef = useRef<ParameterSlidersHandle>(null);
@@ -84,6 +88,33 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       lastPersistedCodeRef.current = project.currentVersion.jscadCode;
     }
   }, [project, code, resetCode]);
+
+  useEffect(() => {
+    if (!focusChatParam || !projectId || hasAutoFocusedChatRef.current) return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+
+    const tryFocus = () => {
+      attempts += 1;
+      const textarea = chatInputRef.current;
+      if (textarea) {
+        textarea.focus();
+        hasAutoFocusedChatRef.current = true;
+        router.replace(pathname);
+        return;
+      }
+      if (attempts < 5) {
+        timer = setTimeout(tryFocus, 60);
+      }
+    };
+
+    tryFocus();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [focusChatParam, projectId, pathname, router]);
 
   useEffect(() => {
     return () => {

@@ -45,7 +45,7 @@ export default function DashboardPage() {
         ownerId: userId,
       });
       if (projectId) {
-        router.push(`/project/${String(projectId)}`);
+      router.push(`/project/${String(projectId)}?focusChat=1`);
       }
     } finally {
       setIsCreating(false);
@@ -63,7 +63,7 @@ export default function DashboardPage() {
         ownerId: userId,
       });
       if (projectId) {
-        router.push(`/project/${String(projectId)}`);
+      router.push(`/project/${String(projectId)}?focusChat=1`);
       }
     } finally {
       setIsCreating(false);
