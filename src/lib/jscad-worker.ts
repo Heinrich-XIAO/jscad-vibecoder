@@ -68,304 +68,30 @@ export class JscadWorker {
   private worker: Worker | null = null;
   private pendingResolve: ((value: WorkerResponse) => void) | null = null;
   private pendingReject: ((reason: JscadWorkerError) => void) | null = null;
+  private isReady = false;
+  private readyPromise: Promise<void> | null = null;
+  private readyResolve: (() => void) | null = null;
+  private staticWorkerUrl = '/jscad-worker.js';
 
   constructor() {
     this.initWorker();
   }
 
-  private initWorker(retryCount = 0) {
-    const baseOrigin =
-      typeof window !== "undefined" && window.location?.origin
-        ? window.location.origin
-        : "https://localhost";
+  private initWorker(): void {
+    // Reset state
+    this.isReady = false;
+    this.readyPromise = null;
+    this.readyResolve = null;
 
-    const workerCode = `
-let modeling = null;
-let loadError = null;
-
-// Try to load JSCAD with retry logic
-function loadJscad(attempt = 0) {
-  try {
-    importScripts('https://unpkg.com/@jscad/modeling@2.12.0/dist/jscad-modeling.min.js');
-    modeling = jscadModeling;
-    return true;
-  } catch (e) {
-    loadError = e;
-    if (attempt < 2) {
-      // Retry up to 2 more times with exponential backoff
-      const delay = Math.pow(2, attempt) * 100;
-      const start = Date.now();
-      while (Date.now() - start < delay) {
-        // Busy wait - blocking but simple for worker context
-      }
-      return loadJscad(attempt + 1);
-    }
-    return false;
-  }
-}
-
-if (!loadJscad()) {
-  throw new Error('Failed to load JSCAD library after 3 attempts. Last error: ' + (loadError?.message || 'Unknown'));
-}
-self.window = self;
-const injectedBaseOrigin = ${JSON.stringify(baseOrigin)};
-self.window.location = { protocol: 'https:', origin: injectedBaseOrigin };
-const baseOrigin = injectedBaseOrigin || 'https://localhost';
-
-const remoteModuleCache = new Map();
-
-const parseErrorLocation = (value) => {
-  const text = [value?.stack, value?.message].filter(Boolean).join('\n');
-  const regex = /(?:at\s+)?([^\s()]+):(\d+):(\d+)/g;
-  let match;
-
-  while ((match = regex.exec(text)) !== null) {
-    const [, source, lineText, columnText] = match;
-    const line = Number(lineText);
-    const column = Number(columnText);
-    if (Number.isFinite(line) && line > 0 && Number.isFinite(column) && column > 0) {
-      return { line, column, source };
-    }
-  }
-
-  return {};
-};
-
-const formatRuntimeError = (value) => {
-  const normalizedError = value instanceof Error ? value : new Error(String(value));
-  const rawMessage = normalizedError.message || String(value);
-  const stackText = normalizedError.stack || '';
-  let message = rawMessage;
-
-  const isExtrudeFromSlicesPlaneError =
-    rawMessage.includes("Cannot read properties of undefined (reading '0')") &&
-    /calculatePlane/.test(stackText) &&
-    /extrudeFromSlices/.test(stackText);
-
-  if (isExtrudeFromSlicesPlaneError) {
-    message = [
-      'Invalid slice generated for extrudeFromSlices().',
-      'One of the generated slices is degenerate (duplicate or invalid points), so JSCAD cannot calculate a plane.',
-      'Ensure your callback returns a valid slice with non-zero edges for capped start/end slices.',
-      'Typical fixes: remove duplicate consecutive points, avoid zero-scale transforms, and only return null when capStart/capEnd are disabled for skipped ends.',
-    ].join(' ');
-  }
-
-  return {
-    normalizedError,
-    message,
-    location: parseErrorLocation(normalizedError),
-  };
-};
-
-const normalizeRemoteUrl = (url) => {
-  const match = url.match(/^https?:\\/\\/github\\.com\\/([^/]+)\\/([^/]+)\\/blob\\/([^/]+)\\/(.+)$/);
-  if (match) {
-    return 'https://raw.githubusercontent.com/' + match[1] + '/' + match[2] + '/' + match[3] + '/' + match[4];
-  }
-  return url;
-};
-
-const isRemotePath = (path) => /^https?:\\/\\//.test(path);
-const isLocalPath = (path) => path.startsWith('/jscad-libs/') || path.startsWith('jscad-libs/');
-
-const resolveLocalUrl = (spec) => {
-  const normalized = spec.startsWith('/') ? spec : '/' + spec;
-  try {
-    return new URL(normalized, baseOrigin).toString();
-  } catch (error) {
-    return baseOrigin.replace(/\\/$/, '') + normalized;
-  }
-};
-
-const normalizeModuleUrl = (spec) => {
-  if (isRemotePath(spec)) return normalizeRemoteUrl(spec);
-  if (isLocalPath(spec)) return resolveLocalUrl(spec);
-  return spec;
-};
-
-const fetchRemoteTextSync = (url) => {
-  const xhr = new XMLHttpRequest();
-  xhr.open('GET', url, false);
-  xhr.send(null);
-  if (xhr.status >= 200 && xhr.status < 300) {
-    const text = xhr.responseText;
-    // Validate that the response looks like JavaScript, not HTML
-    const trimmed = text.trim();
-    if (trimmed.startsWith('<') || trimmed.startsWith('<!')) {
-      throw new Error('Received HTML instead of JavaScript from: ' + url + '. The server may be returning an error page.');
-    }
-    // Check for common JavaScript indicators
-    const hasJsIndicators = /\b(function|var|let|const|if|for|while|return|class|import|export|require|module)\b/.test(text);
-    if (!hasJsIndicators && text.length > 0) {
-      throw new Error('Response from ' + url + ' does not appear to be valid JavaScript');
-    }
-    return text;
-  }
-  throw new Error('Failed to fetch: ' + url + ' (' + xhr.status + ')');
-};
-
-const evaluateRemoteModule = (url) => {
-  const normalized = normalizeModuleUrl(url);
-  if (remoteModuleCache.has(normalized)) return remoteModuleCache.get(normalized).exports;
-
-  let code;
-  try {
-    code = fetchRemoteTextSync(normalized);
-  } catch (fetchError) {
-    throw new Error('Failed to load module "' + url + '": ' + fetchError.message);
-  }
-  
-  const module = { exports: {} };
-  
-  const localRequire = (path) => {
-    if (path === '@jscad/modeling') return modeling;
-    if (path.startsWith('@jscad/modeling/')) {
-      const subpath = path.replace('@jscad/modeling/', '');
-      const parts = subpath.split('/');
-      let result = modeling;
-      for (const part of parts) result = result?.[part];
-      return result;
-    }
-    if (isRemotePath(path) || isLocalPath(path)) return evaluateRemoteModule(path);
-    throw new Error('Unknown module: ' + path);
-  };
-
-  const include = (path) => {
-    if (!path) return;
-    if (isRemotePath(path) || isLocalPath(path)) {
-      evaluateRemoteModule(path);
+    try {
+      this.worker = new Worker(this.staticWorkerUrl, { type: 'classic' });
+    } catch (e) {
+      console.error('[JSCAD Worker] Failed to create worker:', e);
       return;
     }
-    throw new Error('include() only supports URLs or /jscad-libs paths');
-  };
-
-  // Pre-process code to handle ES6 syntax issues
-  // Replace 'const' and 'let' with 'var' for better compatibility in worker context
-  let processedCode = code;
-  
-  // Only process if it looks like the code might have ES6 issues
-  if (code.includes('const ') || code.includes('let ')) {
-    // Simple regex replacement - not perfect but handles most cases
-    processedCode = code
-      .replace(/\bconst\b/g, 'var')
-      .replace(/\blet\b/g, 'var');
-  }
-  
-  try {
-    const fn = new Function('require', 'module', 'exports', 'include', 'window', processedCode);
-    fn(localRequire, module, module.exports, include, self);
-  } catch (syntaxError) {
-    // Try with original code if processed version failed
-    try {
-      const fn = new Function('require', 'module', 'exports', 'include', 'window', code);
-      fn(localRequire, module, module.exports, include, self);
-    } catch (originalError) {
-      throw new Error(
-        'Syntax error in "' + url + '": ' + 
-        (syntaxError.message || originalError.message) + 
-        '. Line numbers may not match original source.'
-      );
-    }
-  }
-  
-  // Only cache if we successfully loaded
-  remoteModuleCache.set(normalized, module);
-
-  return module.exports;
-};
-
-self.onmessage = function(e) {
-  const { type, code, parameters } = e.data;
-  
-  if (type === 'evaluate') {
-    try {
-      if (!modeling) throw new Error('JSCAD not loaded');
-
-      const mockRequire = (path) => {
-        if (path === '@jscad/modeling') return modeling;
-        if (path.startsWith('@jscad/modeling/')) {
-          const subpath = path.replace('@jscad/modeling/', '');
-          const parts = subpath.split('/');
-          let result = modeling;
-          for (const part of parts) result = result?.[part];
-          return result;
-        }
-        if (isRemotePath(path) || isLocalPath(path)) return evaluateRemoteModule(path);
-        throw new Error('Unknown module: ' + path);
-      };
-
-      const include = (path) => {
-        if (!path) return;
-        if (isRemotePath(path) || isLocalPath(path)) {
-          evaluateRemoteModule(path);
-          return;
-        }
-        throw new Error('include() only supports URLs or /jscad-libs paths');
-      };
-
-      const moduleExports = {};
-      const module = { exports: moduleExports };
-      var window = self;
-      
-      // Pre-process user code to handle ES6 syntax
-      let processedCode = code;
-      if (code.includes('const ') || code.includes('let ')) {
-        processedCode = code
-          .replace(/\bconst\b/g, 'var')
-          .replace(/\blet\b/g, 'var');
-      }
-      
-      try {
-        const fn = new Function('require', 'module', 'exports', 'include', processedCode);
-        fn(mockRequire, module, moduleExports, include);
-      } catch (syntaxError) {
-        // Try with original code
-        try {
-          const fn = new Function('require', 'module', 'exports', 'include', code);
-          fn(mockRequire, module, moduleExports, include);
-        } catch (originalError) {
-          throw new Error('Syntax error: ' + (syntaxError.message || originalError.message));
-        }
-      }
-
-      const exports = module.exports;
-      let parameterDefinitions = [];
-      if (typeof exports.getParameterDefinitions === 'function') {
-        parameterDefinitions = exports.getParameterDefinitions();
-        self.postMessage({ type: 'parameters', parameterDefinitions });
-      }
-      
-      if (typeof exports.main === 'function') {
-        const result = exports.main(parameters || {});
-        const geometries = Array.isArray(result) ? result : [result];
-        self.postMessage({ type: 'result', geometries, parameterDefinitions, metadata: { polygonCount: geometries.length } });
-      } else {
-        throw new Error('No main() exported');
-      }
-    } catch (error) {
-      const runtimeError = formatRuntimeError(error);
-      self.postMessage({
-        type: 'error',
-        error: {
-          message: runtimeError.message,
-          stack: runtimeError.normalizedError.stack,
-          line: runtimeError.location.line,
-          column: runtimeError.location.column,
-          source: runtimeError.location.source,
-        },
-      });
-    }
-  }
-};
-`;
-
-    const blob = new Blob([workerCode], { type: "application/javascript" });
-    this.worker = new Worker(URL.createObjectURL(blob));
 
     this.worker.onerror = (e) => {
       console.error('[JSCAD Worker] Error:', e);
-      // Reject any pending promise
       if (this.pendingReject) {
         this.pendingReject(new JscadWorkerError({ 
           message: `Worker error: ${e.message || 'Unknown worker error'}` 
@@ -373,12 +99,22 @@ self.onmessage = function(e) {
         this.pendingResolve = null;
         this.pendingReject = null;
       }
-      // Restart worker on error
       this.terminate();
       this.initWorker();
     };
 
     this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+      // Check for ready message (using any to avoid TS strict type issues)
+      const data = e.data as any;
+      if (data.type === 'ready') {
+        this.isReady = true;
+        if (this.readyResolve) {
+          this.readyResolve();
+          this.readyResolve = null;
+        }
+        return;
+      }
+      
       if (e.data.type === "parameters") return;
       if (e.data.type === "error") {
         this.pendingReject?.(new JscadWorkerError(e.data.error ?? { message: "Unknown error" }));
@@ -390,27 +126,44 @@ self.onmessage = function(e) {
     };
   }
 
+  private waitForReady(): Promise<void> {
+    if (this.isReady) return Promise.resolve();
+    if (!this.readyPromise) {
+      this.readyPromise = new Promise((resolve) => {
+        this.readyResolve = resolve;
+        setTimeout(() => {
+          if (this.readyResolve) {
+            this.readyResolve();
+            this.readyResolve = null;
+          }
+        }, 15000);
+      });
+    }
+    return this.readyPromise;
+  }
+
   evaluate(
     code: string,
     parameters?: Record<string, unknown>,
     attempt = 0
   ): Promise<WorkerResponse> {
-    return new Promise((resolve, reject) => {
-      // Reinitialize worker if not available
+    return new Promise(async (resolve, reject) => {
       if (!this.worker) {
         if (attempt < 2) {
-          this.initWorker(attempt);
-          // Retry after a short delay
+          this.initWorker();
           setTimeout(() => {
             this.evaluate(code, parameters, attempt + 1)
               .then(resolve)
               .catch(reject);
-          }, 100);
+          }, 500);
           return;
         }
         reject(new JscadWorkerError({ message: "Worker failed to initialize after retries" }));
         return;
       }
+
+      // Wait for worker to be ready
+      await this.waitForReady();
 
       this.pendingResolve = resolve;
       this.pendingReject = reject;
@@ -423,13 +176,11 @@ self.onmessage = function(e) {
 
       this.worker.postMessage(request);
 
-      // Timeout after 30 seconds
       setTimeout(() => {
         if (this.pendingReject) {
           this.pendingReject(new JscadWorkerError({ message: "JSCAD evaluation timed out (30s)" }));
           this.pendingResolve = null;
           this.pendingReject = null;
-          // Restart worker
           this.terminate();
           this.initWorker();
         }
@@ -440,6 +191,7 @@ self.onmessage = function(e) {
   terminate() {
     this.worker?.terminate();
     this.worker = null;
+    this.isReady = false;
   }
 }
 
