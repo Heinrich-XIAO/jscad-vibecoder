@@ -1054,7 +1054,7 @@ module.exports = { main, getParameterDefinitions }
 \`\`\`
 
 Good write_code output (rack library):
-```
+\`\`\`
 include('/jscad-libs/mechanics/racks.jscad')
 function getParameterDefinitions() {
   return [
@@ -1080,7 +1080,7 @@ function main(params) {
   return unwrap(rack.getModel())
 }
 module.exports = { main, getParameterDefinitions }
-```
+\`\`\`
 
 ## Tool Enforcement (Critical)
 - If the user requests a model, code, or modification, you MUST call the appropriate tool (write_code or edit_code).
