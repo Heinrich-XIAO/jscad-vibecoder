@@ -73,16 +73,40 @@ export class JscadWorker {
     this.initWorker();
   }
 
-  private initWorker() {
+  private initWorker(retryCount = 0) {
     const baseOrigin =
       typeof window !== "undefined" && window.location?.origin
         ? window.location.origin
         : "https://localhost";
 
     const workerCode = `
-importScripts('https://unpkg.com/@jscad/modeling@2.12.0/dist/jscad-modeling.min.js');
+let modeling = null;
+let loadError = null;
 
-const modeling = jscadModeling;
+// Try to load JSCAD with retry logic
+function loadJscad(attempt = 0) {
+  try {
+    importScripts('https://unpkg.com/@jscad/modeling@2.12.0/dist/jscad-modeling.min.js');
+    modeling = jscadModeling;
+    return true;
+  } catch (e) {
+    loadError = e;
+    if (attempt < 2) {
+      // Retry up to 2 more times with exponential backoff
+      const delay = Math.pow(2, attempt) * 100;
+      const start = Date.now();
+      while (Date.now() - start < delay) {
+        // Busy wait - blocking but simple for worker context
+      }
+      return loadJscad(attempt + 1);
+    }
+    return false;
+  }
+}
+
+if (!loadJscad()) {
+  throw new Error('Failed to load JSCAD library after 3 attempts. Last error: ' + (loadError?.message || 'Unknown'));
+}
 self.window = self;
 const injectedBaseOrigin = ${JSON.stringify(baseOrigin)};
 self.window.location = { protocol: 'https:', origin: injectedBaseOrigin };
@@ -276,6 +300,17 @@ self.onmessage = function(e) {
 
     this.worker.onerror = (e) => {
       console.error('[JSCAD Worker] Error:', e);
+      // Reject any pending promise
+      if (this.pendingReject) {
+        this.pendingReject(new JscadWorkerError({ 
+          message: `Worker error: ${e.message || 'Unknown worker error'}` 
+        }));
+        this.pendingResolve = null;
+        this.pendingReject = null;
+      }
+      // Restart worker on error
+      this.terminate();
+      this.initWorker();
     };
 
     this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
@@ -292,11 +327,23 @@ self.onmessage = function(e) {
 
   evaluate(
     code: string,
-    parameters?: Record<string, unknown>
+    parameters?: Record<string, unknown>,
+    attempt = 0
   ): Promise<WorkerResponse> {
     return new Promise((resolve, reject) => {
+      // Reinitialize worker if not available
       if (!this.worker) {
-        reject(new JscadWorkerError({ message: "Worker not initialized" }));
+        if (attempt < 2) {
+          this.initWorker(attempt);
+          // Retry after a short delay
+          setTimeout(() => {
+            this.evaluate(code, parameters, attempt + 1)
+              .then(resolve)
+              .catch(reject);
+          }, 100);
+          return;
+        }
+        reject(new JscadWorkerError({ message: "Worker failed to initialize after retries" }));
         return;
       }
 
