@@ -31,6 +31,7 @@ export interface JscadExecutionError {
   stack?: string;
   line?: number;
   column?: number;
+  source?: string;
 }
 
 export interface ParameterDefinition {
@@ -48,6 +49,7 @@ export interface ParameterDefinition {
 class JscadWorkerError extends Error {
   line?: number;
   column?: number;
+  source?: string;
 
   constructor(details: JscadExecutionError) {
     super(details.message);
@@ -55,6 +57,7 @@ class JscadWorkerError extends Error {
     this.stack = details.stack ?? this.stack;
     this.line = details.line;
     this.column = details.column;
+    this.source = details.source;
   }
 }
 
@@ -88,21 +91,16 @@ const baseOrigin = injectedBaseOrigin || 'https://localhost';
 const remoteModuleCache = new Map();
 
 const parseErrorLocation = (value) => {
-  const text = [value?.stack, value?.message].filter(Boolean).join('\\n');
-  const patterns = [
-    /<anonymous>:(\\d+):(\\d+)/,
-    /eval at [^\\n]*<anonymous>:(\\d+):(\\d+)/,
-    /:(\\d+):(\\d+)/,
-  ];
+  const text = [value?.stack, value?.message].filter(Boolean).join('\n');
+  const regex = /(?:at\s+)?([^\s()]+):(\d+):(\d+)/g;
+  let match;
 
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      const line = Number(match[1]);
-      const column = Number(match[2]);
-      if (Number.isFinite(line) && line > 0 && Number.isFinite(column) && column > 0) {
-        return { line, column };
-      }
+  while ((match = regex.exec(text)) !== null) {
+    const [, source, lineText, columnText] = match;
+    const line = Number(lineText);
+    const column = Number(columnText);
+    if (Number.isFinite(line) && line > 0 && Number.isFinite(column) && column > 0) {
+      return { line, column, source };
     }
   }
 
@@ -265,6 +263,7 @@ self.onmessage = function(e) {
           stack: runtimeError.normalizedError.stack,
           line: runtimeError.location.line,
           column: runtimeError.location.column,
+          source: runtimeError.location.source,
         },
       });
     }

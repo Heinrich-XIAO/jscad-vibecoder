@@ -54,8 +54,24 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     return extractLocation(error?.stack) ?? extractLocation(error?.message);
   }, [error?.message, error?.stack, extractLocation]);
 
-  const errorLine = error?.line ?? fallbackLocation?.line;
-  const errorColumn = error?.column ?? fallbackLocation?.column;
+  const errorLocation = useMemo(() => {
+    if (error?.line) {
+      return { line: error.line, column: error.column, source: error.source };
+    }
+    if (fallbackLocation?.line) {
+      return { ...fallbackLocation, source: undefined };
+    }
+    return null;
+  }, [error, fallbackLocation]);
+
+  const errorLine = errorLocation?.line;
+  const errorColumn = errorLocation?.column;
+  const isUserCodeFrame = (source?: string) => {
+    if (!source) return true;
+    const normalized = source.toLowerCase();
+    return normalized.includes("<anonymous>") || normalized.includes("anonymous") || normalized.includes("eval");
+  };
+  const shouldHighlight = Boolean(errorLine && isUserCodeFrame(errorLocation?.source));
   const primaryMessage = error?.message?.split("\n")[0] ?? "";
   const stackText = error?.stack?.trim() ?? "";
   const hasStack = stackText.length > 0;
@@ -66,7 +82,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     const model = editor?.getModel();
     if (!editor || !monaco || !model) return;
 
-    if (!error || !errorLine) {
+    if (!error || !shouldHighlight) {
       monaco.editor.setModelMarkers(model, "jscad-runtime", []);
       decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, []);
       return;
@@ -96,7 +112,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     ]);
 
     editor.revealLineInCenterIfOutsideViewport(errorLine);
-  }, [error, errorColumn, errorLine, primaryMessage]);
+  }, [error, errorColumn, errorLine, primaryMessage, shouldHighlight]);
 
   useEffect(() => {
     updateErrorMarker();
