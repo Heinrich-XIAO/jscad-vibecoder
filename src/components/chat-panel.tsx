@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -30,6 +30,9 @@ interface ChatMessage {
     result: unknown;
   }>;
 }
+
+type PendingStatus = "sending" | "sent" | "failed";
+type DisplayMessage = ChatMessage & { pendingStatus?: PendingStatus };
 
 interface LiveToolCall {
   id: string;
@@ -140,7 +143,7 @@ export function ChatPanel({
   inputRef: externalInputRef,
   ownerId,
 }: ChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pendingMessages, setPendingMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [liveToolCalls, setLiveToolCalls] = useState<LiveToolCall[]>([]);
@@ -160,49 +163,78 @@ export function ChatPanel({
   const sendMessage = useMutation(api.chat.send);
   const updateProject = useMutation(api.projects.update);
 
-  // Load messages from Convex when they change
-  useEffect(() => {
-    if (!convexMessages) return;
-
-    const loadedMessages: ChatMessage[] = convexMessages.map((msg: { _id: string; role: string; content: string; toolCalls?: unknown }) => ({
+  const loadedMessages = useMemo<ChatMessage[]>(() => {
+    if (!convexMessages) return [];
+    return convexMessages.map((msg: { _id: string; role: string; content: string; toolCalls?: unknown }) => ({
       id: msg._id,
       role: msg.role as "user" | "assistant" | "system" | "tool",
       content: msg.content,
       toolCalls: msg.toolCalls as Array<{ toolName: string; args: Record<string, unknown>; result: unknown }> | undefined,
     }));
-
-    setMessages((prev) => {
-      const pending = prev.filter((msg) => msg.id.startsWith(PENDING_MESSAGE_PREFIX));
-      return [...loadedMessages, ...pending];
-    });
   }, [convexMessages]);
+
+  const displayedMessages = useMemo<DisplayMessage[]>(() => {
+    const loadedIds = new Set(loadedMessages.map((msg) => msg.id));
+    const pending = pendingMessages.filter((msg) => !loadedIds.has(msg.id));
+    return [...loadedMessages, ...pending];
+  }, [loadedMessages, pendingMessages]);
+
+  useEffect(() => {
+    if (pendingMessages.length === 0) return;
+    const loadedIds = new Set(loadedMessages.map((msg) => msg.id));
+    const remaining = pendingMessages.filter((msg) => !loadedIds.has(msg.id));
+    if (remaining.length !== pendingMessages.length) {
+      setPendingMessages(remaining);
+    }
+    // Only remove pending entries after Convex returns them
+  }, [loadedMessages, pendingMessages]);
 
   const persistMessage = useCallback(
     async (message: Omit<ChatMessage, "id">, pendingId: string) => {
-    try {
-      const persisted = await sendMessage({
-        projectId: projectId as Id<"projects">,
-        ownerId,
-        role: message.role,
-        content: message.content,
-        toolCalls: message.toolCalls,
-      });
-      if (persisted && typeof pendingId === "string") {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === pendingId ? { ...msg, id: persisted ?? msg.id } : msg
-          )
-        );
+      try {
+        const persisted = await sendMessage({
+          projectId: projectId as Id<"projects">,
+          ownerId,
+          role: message.role,
+          content: message.content,
+          toolCalls: message.toolCalls,
+        });
+        if (persisted && typeof pendingId === "string") {
+          setPendingMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === pendingId
+                ? { ...msg, id: persisted, pendingStatus: "sent" }
+                : msg
+            )
+          );
+        }
+      } catch (error) {
+        console.error("Failed to persist message:", error);
+        if (typeof pendingId === "string") {
+          setPendingMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === pendingId ? { ...msg, pendingStatus: "failed" } : msg
+            )
+          );
+        }
       }
-    } catch (error) {
-      console.error("Failed to persist message:", error);
-    }
-  }, [ownerId, projectId, sendMessage]);
+    },
+    [ownerId, projectId, sendMessage]
+  );
 
-  const onAddMessage = useCallback(async (message: Omit<ChatMessage, "id">) => {
+    const onAddMessage = useCallback(async (message: Omit<ChatMessage, "id">, options?: { optimistic?: boolean }) => {
     // Add to local state immediately for responsiveness
     const pendingId = `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`;
-    setMessages((prev) => [...prev, { ...message, id: pendingId }]);
+    if (options?.optimistic) {
+      setPendingMessages((prev) => [
+        ...prev,
+        {
+          ...message,
+          id: pendingId,
+          pendingStatus: "sending",
+        },
+      ]);
+    }
     // Persist to Convex
     await persistMessage(message, pendingId);
   }, [persistMessage]);
@@ -217,7 +249,7 @@ export function ChatPanel({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [displayedMessages, scrollToBottom]);
 
   const generateResponse = useCallback(async (prompt: string) => {
     setIsGenerating(true);
@@ -417,7 +449,7 @@ export function ChatPanel({
     const prompt = input.trim();
     setInput("");
 
-    const hasUserMessages = messages.some((msg) => msg.role === "user");
+    const hasUserMessages = displayedMessages.some((msg) => msg.role === "user");
     const canAutoName = projectName
       ? defaultProjectNames.has(projectName.trim().toLowerCase())
       : false;
@@ -446,20 +478,26 @@ export function ChatPanel({
     }
 
     // Add user message
-    await onAddMessage({
-      role: "user",
-      content: prompt,
-    });
+    await onAddMessage(
+      {
+        role: "user",
+        content: prompt,
+      },
+      { optimistic: true }
+    );
 
     await generateResponse(prompt);
   };
 
   const handleRetry = useCallback(async (prompt: string) => {
     if (!prompt.trim() || isGenerating) return;
-    await onAddMessage({
-      role: "user",
-      content: prompt,
-    });
+    await onAddMessage(
+      {
+        role: "user",
+        content: prompt,
+      },
+      { optimistic: true }
+    );
     await generateResponse(prompt);
   }, [generateResponse, isGenerating, onAddMessage]);
 
@@ -480,11 +518,11 @@ export function ChatPanel({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-        {messages.map((msg, index) => (
+        {displayedMessages.map((msg, index) => (
           <MessageBubble
             key={msg.id}
             message={msg}
-            retryPrompt={getRetryPrompt(messages, index)}
+            retryPrompt={getRetryPrompt(displayedMessages, index)}
             onRetry={handleRetry}
             isGenerating={isGenerating}
           />
@@ -566,7 +604,7 @@ function MessageBubble({
   onRetry,
   isGenerating,
 }: {
-  message: ChatMessage;
+  message: DisplayMessage;
   retryPrompt?: string;
   onRetry?: (prompt: string) => void;
   isGenerating?: boolean;
@@ -616,6 +654,18 @@ function MessageBubble({
             {config.label}
           </span>
         </div>
+        {(message.pendingStatus === "sending" || message.pendingStatus === "failed") && (
+          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+            {message.pendingStatus === "sending" ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <AlertCircle className="w-3 h-3 text-amber-500" />
+            )}
+            <span>
+              {message.pendingStatus === "sending" ? "Sending..." : "Failed to send"}
+            </span>
+          </div>
+        )}
         <div
           className={`text-sm ${config.textColor} prose prose-sm dark:prose-invert max-w-none break-words [&>p]:mb-2 [&>p:last-child]:mb-0 [&>pre]:bg-black/50 [&>pre]:p-2 [&>pre]:rounded-md`}
         >
@@ -646,7 +696,7 @@ function MessageBubble({
   );
 }
 
-function getRetryPrompt(messages: ChatMessage[], index: number) {
+function getRetryPrompt(messages: DisplayMessage[], index: number) {
   const current = messages[index];
   if (current?.role === "user") {
     return current.content;
