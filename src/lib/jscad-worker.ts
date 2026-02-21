@@ -188,7 +188,20 @@ const fetchRemoteTextSync = (url) => {
   const xhr = new XMLHttpRequest();
   xhr.open('GET', url, false);
   xhr.send(null);
-  if (xhr.status >= 200 && xhr.status < 300) return xhr.responseText;
+  if (xhr.status >= 200 && xhr.status < 300) {
+    const text = xhr.responseText;
+    // Validate that the response looks like JavaScript, not HTML
+    const trimmed = text.trim();
+    if (trimmed.startsWith('<') || trimmed.startsWith('<!')) {
+      throw new Error('Received HTML instead of JavaScript from: ' + url + '. The server may be returning an error page.');
+    }
+    // Check for common JavaScript indicators
+    const hasJsIndicators = /\b(function|var|let|const|if|for|while|return|class|import|export|require|module)\b/.test(text);
+    if (!hasJsIndicators && text.length > 0) {
+      throw new Error('Response from ' + url + ' does not appear to be valid JavaScript');
+    }
+    return text;
+  }
   throw new Error('Failed to fetch: ' + url + ' (' + xhr.status + ')');
 };
 
@@ -196,10 +209,15 @@ const evaluateRemoteModule = (url) => {
   const normalized = normalizeModuleUrl(url);
   if (remoteModuleCache.has(normalized)) return remoteModuleCache.get(normalized).exports;
 
-  const code = fetchRemoteTextSync(normalized);
+  let code;
+  try {
+    code = fetchRemoteTextSync(normalized);
+  } catch (fetchError) {
+    throw new Error('Failed to load module "' + url + '": ' + fetchError.message);
+  }
+  
   const module = { exports: {} };
-  remoteModuleCache.set(normalized, module);
-
+  
   const localRequire = (path) => {
     if (path === '@jscad/modeling') return modeling;
     if (path.startsWith('@jscad/modeling/')) {
@@ -222,8 +240,37 @@ const evaluateRemoteModule = (url) => {
     throw new Error('include() only supports URLs or /jscad-libs paths');
   };
 
-  const fn = new Function('require', 'module', 'exports', 'include', 'window', code);
-  fn(localRequire, module, module.exports, include, self);
+  // Pre-process code to handle ES6 syntax issues
+  // Replace 'const' and 'let' with 'var' for better compatibility in worker context
+  let processedCode = code;
+  
+  // Only process if it looks like the code might have ES6 issues
+  if (code.includes('const ') || code.includes('let ')) {
+    // Simple regex replacement - not perfect but handles most cases
+    processedCode = code
+      .replace(/\bconst\b/g, 'var')
+      .replace(/\blet\b/g, 'var');
+  }
+  
+  try {
+    const fn = new Function('require', 'module', 'exports', 'include', 'window', processedCode);
+    fn(localRequire, module, module.exports, include, self);
+  } catch (syntaxError) {
+    // Try with original code if processed version failed
+    try {
+      const fn = new Function('require', 'module', 'exports', 'include', 'window', code);
+      fn(localRequire, module, module.exports, include, self);
+    } catch (originalError) {
+      throw new Error(
+        'Syntax error in "' + url + '": ' + 
+        (syntaxError.message || originalError.message) + 
+        '. Line numbers may not match original source.'
+      );
+    }
+  }
+  
+  // Only cache if we successfully loaded
+  remoteModuleCache.set(normalized, module);
 
   return module.exports;
 };
@@ -261,8 +308,26 @@ self.onmessage = function(e) {
       const module = { exports: moduleExports };
       var window = self;
       
-      const fn = new Function('require', 'module', 'exports', 'include', code);
-      fn(mockRequire, module, moduleExports, include);
+      // Pre-process user code to handle ES6 syntax
+      let processedCode = code;
+      if (code.includes('const ') || code.includes('let ')) {
+        processedCode = code
+          .replace(/\bconst\b/g, 'var')
+          .replace(/\blet\b/g, 'var');
+      }
+      
+      try {
+        const fn = new Function('require', 'module', 'exports', 'include', processedCode);
+        fn(mockRequire, module, moduleExports, include);
+      } catch (syntaxError) {
+        // Try with original code
+        try {
+          const fn = new Function('require', 'module', 'exports', 'include', code);
+          fn(mockRequire, module, moduleExports, include);
+        } catch (originalError) {
+          throw new Error('Syntax error: ' + (syntaxError.message || originalError.message));
+        }
+      }
 
       const exports = module.exports;
       let parameterDefinitions = [];
