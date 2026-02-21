@@ -979,29 +979,8 @@ module.exports = { main, getParameterDefinitions }
 - Legacy OpenJSCAD v1 libraries can be used by including /jscad-libs/compat/v1.js first.
 - Prefer using the provided libraries whenever they cover the requested part/model.
 - Available local libraries:
-  - /jscad-libs/mechanics/airfoilNaca.jscad
-  - /jscad-libs/mechanics/aluprofile.jscad
-  - /jscad-libs/mechanics/basicSplitWall.jscad
-  - /jscad-libs/mechanics/bearingLM8LUU.jscad
-  - /jscad-libs/mechanics/bearingLM8UU.jscad
-  - /jscad-libs/mechanics/bearingblockSMAUU.jscad
-  - /jscad-libs/mechanics/cfflange.jscad
   - /jscad-libs/mechanics/gears.jscad
   - /jscad-libs/mechanics/racks.jscad
-  - /jscad-libs/mechanics/isothread.jscad
-  - /jscad-libs/mechanics/motedisDelrin.jscad
-  - /jscad-libs/mechanics/motedisKFL08.jscad
-  - /jscad-libs/mechanics/motorElectric_Unknown1.jscad
-  - /jscad-libs/mechanics/screwclamp.jscad
-  - /jscad-libs/mechanics/servoSG90.jscad
-  - /jscad-libs/mechanics/stepper28byj_48.jscad
-  - /jscad-libs/mechanics/stepperNema17.jscad
-  - /jscad-libs/electronics/connectors/M24308_4.jscad
-  - /jscad-libs/electronics/embedded/raspberrypibplus.jscad
-  - /jscad-libs/electronics/forkedlightbarrier/hy86n.jscad
-  - /jscad-libs/electronics/lasermodule/001_405_20W.jscad
-  - /jscad-libs/electronics/lasermodule/tocan.jscad
-  - /jscad-libs/electronics/ultrasonicsensors/hcsr04.jscad
 - Prefer JSCAD v2-compatible libraries; avoid legacy v1-only CSG libraries unless the user asks for them.
 
 ## Preferred Library Usage
