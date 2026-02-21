@@ -919,6 +919,11 @@ function buildToolDefinitions() {
               type: "boolean",
               description: "For 'pitch_aligned': set true if reference is a rack (pitch line, not circle)",
             },
+            pitchAxis: {
+              type: "string",
+              enum: ["x", "y"],
+              description: "For 'pitch_aligned': axis for center-distance placement. Use 'y' for rack meshes in this library (default), or 'x' for alternate layouts.",
+            },
           },
           required: ["target", "reference", "alignment"],
         },
@@ -961,6 +966,11 @@ function buildToolDefinitions() {
             isRackB: {
               type: "boolean",
               description: "For 'pitch_mesh': true if geometryB is a rack",
+            },
+            pitchAxis: {
+              type: "string",
+              enum: ["x", "y"],
+              description: "For 'pitch_mesh': axis used for center-distance placement (must match position_relative). Default is 'y'.",
             },
           },
           required: ["geometryA", "geometryB", "checkType"],
@@ -1107,6 +1117,7 @@ When working with gears, racks, or other mechanical elements that mesh together:
 - **ALWAYS use position_relative with alignment="pitch_aligned"** - NEVER manually calculate translate() coordinates
 - **ALWAYS use check_alignment with checkType="pitch_mesh"** to verify proper meshing
 - **ALWAYS use measure_geometry with gearParams/rackParams** to get pitch circle/line info
+- For rack meshes in the provided mechanics library, use **pitchAxis="y"** unless the rack is explicitly oriented differently
 
 Manual positioning calculations for gears/racks are error-prone and will result in incorrect meshing. The tools calculate correct center distances based on pitch geometry.
 
@@ -1125,11 +1136,11 @@ const rack = unwrap(window.jscad.tspi.rack(printerSettings, 100, 8, 1, 20, 20, 0
 // For gear (module=1, teeth=20): pitchRadius = 1 * 20 / 2 = 10mm
 // For rack: referenceIsRack = true, pitchRadius = 0
 // Tool call: position_relative(target="gear", reference="rack", alignment="pitch_aligned", 
-//             targetPitchRadius=10, referenceIsRack=true, gap=0.1)
-// Returns: translate([10.1, 0, 0], gear)
+//             targetPitchRadius=10, referenceIsRack=true, pitchAxis="y", gap=0.1)
+// Returns: translate([0, 10.1, 0], gear)
 
 // Step 3: Apply the returned translate expression
-const positionedGear = translate([10.1, 0, 0], gear)
+const positionedGear = translate([0, 10.1, 0], gear)
 return [rack, positionedGear]
 \`\`\`
 
@@ -1138,8 +1149,8 @@ return [rack, positionedGear]
 // Two gears: gearA (module=1, teeth=20) and gearB (module=1, teeth=30)
 // pitchRadiusA = 10mm, pitchRadiusB = 15mm
 // position_relative(target="gearB", reference="gearA", alignment="pitch_aligned",
-//                   targetPitchRadius=15, referencePitchRadius=10, gap=0)
-// Returns: translate([25, 0, 0], gearB)  // 10 + 15 = 25mm center distance
+//                   targetPitchRadius=15, referencePitchRadius=10, pitchAxis="x", gap=0)
+// Returns: translate([25, 0, 0], gearB)  // 10 + 15 = 25mm center distance along X
 \`\`\`
 
 **For general positioning (next_to, above, below):**
@@ -1156,7 +1167,7 @@ Use check_alignment to verify proper meshing before finalizing:
 \`\`\`
 // Verify gear-rack meshing
 check_alignment(geometryA="gear", geometryB="rack", checkType="pitch_mesh",
-                pitchRadiusA=10, pitchRadiusB=0, isRackA=false, isRackB=true)
+                pitchRadiusA=10, pitchRadiusB=0, isRackA=false, isRackB=true, pitchAxis="y")
 // Returns: expected center distance, alignment verification info
 \`\`\`
 
@@ -1548,6 +1559,7 @@ function executeToolCall(
       const targetPitchRadius = args.targetPitchRadius as number | undefined;
       const referencePitchRadius = args.referencePitchRadius as number | undefined;
       const referenceIsRack = (args.referenceIsRack as boolean) ?? false;
+      const pitchAxis = ((args.pitchAxis as string | undefined) ?? "y") === "x" ? "x" : "y";
 
       let translateExpr: string;
       let explanation: string;
@@ -1588,12 +1600,18 @@ function executeToolCall(
 
           if (referenceIsRack) {
             const distance = targetPitchRadius + gap;
-            translateExpr = `translate([${distance.toFixed(3)}, 0, 0], ${target})`;
-            explanation = `Position gear ${target} (pitch radius ${targetPitchRadius}mm) to mesh with rack ${reference}. Pitch circle touches pitch line at distance ${distance.toFixed(3)}mm.`;
+            translateExpr =
+              pitchAxis === "x"
+                ? `translate([${distance.toFixed(3)}, 0, 0], ${target})`
+                : `translate([0, ${distance.toFixed(3)}, 0], ${target})`;
+            explanation = `Position gear ${target} (pitch radius ${targetPitchRadius}mm) to mesh with rack ${reference}. Pitch circle touches pitch line at distance ${distance.toFixed(3)}mm along ${pitchAxis.toUpperCase()} axis.`;
           } else if (referencePitchRadius !== undefined) {
             const centerDistance = targetPitchRadius + referencePitchRadius + gap;
-            translateExpr = `translate([${centerDistance.toFixed(3)}, 0, 0], ${target})`;
-            explanation = `Position gear ${target} (pitch radius ${targetPitchRadius}mm) to mesh with gear ${reference} (pitch radius ${referencePitchRadius}mm). Center distance = ${centerDistance.toFixed(3)}mm.`;
+            translateExpr =
+              pitchAxis === "x"
+                ? `translate([${centerDistance.toFixed(3)}, 0, 0], ${target})`
+                : `translate([0, ${centerDistance.toFixed(3)}, 0], ${target})`;
+            explanation = `Position gear ${target} (pitch radius ${targetPitchRadius}mm) to mesh with gear ${reference} (pitch radius ${referencePitchRadius}mm). Center distance = ${centerDistance.toFixed(3)}mm along ${pitchAxis.toUpperCase()} axis.`;
           } else {
             return {
               output: {
@@ -1621,6 +1639,7 @@ function executeToolCall(
           alignment,
           direction,
           gap,
+          pitchAxis,
           translateExpression: translateExpr,
           explanation,
           usageNote: "Use this translate expression in your code. For 'next_to', 'above', 'below' alignments, you need to measure geometries first to get exact sizes. For 'pitch_aligned', the coordinates are pre-calculated.",
@@ -1636,6 +1655,7 @@ function executeToolCall(
       const pitchRadiusB = args.pitchRadiusB as number | undefined;
       const isRackA = (args.isRackA as boolean) ?? false;
       const isRackB = (args.isRackB as boolean) ?? false;
+      const pitchAxis = ((args.pitchAxis as string | undefined) ?? "y") === "x" ? "x" : "y";
 
       const output: Record<string, unknown> = {
         geometryA,
@@ -1665,16 +1685,27 @@ function executeToolCall(
             gearA: { pitchRadius: pitchRadiusA, isRack: isRackA },
             gearB: { pitchRadius: pitchRadiusB, isRack: isRackB },
             expectedCenterDistance,
-            description: `For proper meshing, center distance should be ${expectedCenterDistance.toFixed(3)}mm (sum of pitch radii). Check that geometries are positioned at this distance.`,
+            expectedOffsetVector:
+              pitchAxis === "x"
+                ? [expectedCenterDistance, 0, 0]
+                : [0, expectedCenterDistance, 0],
+            description: `For proper meshing, center distance should be ${expectedCenterDistance.toFixed(3)}mm (sum of pitch radii) along ${pitchAxis.toUpperCase()} axis. Check that geometries are positioned at this distance.`,
           };
         } else if (isGearRack) {
           const gearRadius = isRackA ? pitchRadiusB : pitchRadiusA;
           output.pitchMesh = {
             type: "gear-to-rack",
             gear: { pitchRadius: gearRadius },
-            rack: { pitchLine: "at y=0 in rack's coordinate system" },
+            rack: {
+              pitchLine:
+                pitchAxis === "x"
+                  ? "at x=0 in rack's coordinate system"
+                  : "at y=0 in rack's coordinate system",
+            },
             expectedDistance: gearRadius,
-            description: `For proper meshing, gear center should be ${gearRadius.toFixed(3)}mm from rack's pitch line. The gear's pitch circle should touch the rack's pitch line.`,
+            expectedOffsetVector:
+              pitchAxis === "x" ? [gearRadius, 0, 0] : [0, gearRadius, 0],
+            description: `For proper meshing, gear center should be ${gearRadius.toFixed(3)}mm from rack's pitch line along ${pitchAxis.toUpperCase()} axis. The gear's pitch circle should touch the rack's pitch line.`,
           };
         } else {
           output.pitchMesh = {
