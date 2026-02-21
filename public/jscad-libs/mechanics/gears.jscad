@@ -251,4 +251,20 @@ window.jscad.tspi.involuteGearByModuleCircularToothThickness = function(printer,
 		centerholeRadius: centerholeRadius || 0
 	});
 };
+
+window.jscad.tspi.gear = function(printer, diameter, thickness, boreDiameter, module, pressureAngle) {
+	var gearDiameter = typeof(diameter) === 'number' && diameter > 0 ? diameter : 20;
+	var gearThickness = typeof(thickness) === 'number' && thickness > 0 ? thickness : 8;
+	var gearBoreDiameter = typeof(boreDiameter) === 'number' && boreDiameter >= 0 ? boreDiameter : 6;
+	var gearModule = typeof(module) === 'number' && module > 0 ? module : 1;
+	var gearPressureAngle = typeof(pressureAngle) === 'number' && pressureAngle > 0 ? pressureAngle : 20;
+
+	return new window.jscad.tspi.involuteGear(printer, {
+		pitchDiameter: gearDiameter,
+		module: gearModule,
+		pressureAngle: gearPressureAngle,
+		thickness: gearThickness,
+		centerholeRadius: gearBoreDiameter / 2
+	});
+};
 })();

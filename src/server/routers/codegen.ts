@@ -1003,14 +1003,17 @@ module.exports = { main, getParameterDefinitions }
 ## Preferred Library Usage
 - Gears: use the provided library instead of hand-built teeth.
   - include('/jscad-libs/mechanics/gears.jscad') (loads v1 compat automatically).
-  - Create gears with window.jscad.tspi.involuteGear(printerSettings, params).
+  - Prefer window.jscad.tspi.gear(printerSettings, diameter, thickness, boreDiameter, module, pressureAngle) for simple gears.
+  - This helper is diameter-first and should prioritize matching the requested diameter.
+  - Defaults: thickness = 8mm, boreDiameter = 6mm, module = 1mm, pressureAngle = 20deg.
+  - Use window.jscad.tspi.involuteGear(printerSettings, params) only for advanced/explicit parameterizations.
   - ALWAYS wrap the return value with unwrap(): return unwrap(gear.getModel()).
   - The unwrap() function is provided by the v1 compat layer and strips non-serializable methods.
   - Minimal example (use param defaults and define params via getParameterDefinitions):
     include('/jscad-libs/mechanics/gears.jscad')
     function main(params) {
       const printerSettings = { scale: 1, correctionInsideDiameter: 0, correctionOutsideDiameter: 0, correctionInsideDiameterMoving: 0, correctionOutsideDiameterMoving: 0, resolutionCircle: 360 }
-      const gear = new window.jscad.tspi.involuteGear(printerSettings, { module: 2, teethNumber: 20, thickness: 6, centerholeRadius: 5, pressureAngle: 20 })
+      const gear = window.jscad.tspi.gear(printerSettings, 40, 8, 6, 1, 20)
       return unwrap(gear.getModel())
     }
 
@@ -1019,14 +1022,15 @@ Good write_code output (gear library):
 include('/jscad-libs/mechanics/gears.jscad')
 function getParameterDefinitions() {
   return [
-    { name: 'module', type: 'float', initial: 2, caption: 'Module' },
-    { name: 'teeth', type: 'int', initial: 20, caption: 'Teeth' },
-    { name: 'thickness', type: 'float', initial: 6, caption: 'Thickness' },
-    { name: 'centerhole', type: 'float', initial: 5, caption: 'Center hole' },
+    { name: 'diameter', type: 'float', initial: 40, caption: 'Gear diameter' },
+    { name: 'thickness', type: 'float', initial: 8, caption: 'Thickness' },
+    { name: 'boreDiameter', type: 'float', initial: 6, caption: 'Bore diameter' },
+    { name: 'module', type: 'float', initial: 1, caption: 'Module' },
+    { name: 'pressureAngle', type: 'float', initial: 20, caption: 'Pressure angle' },
   ]
 }
 function main(params) {
-  const { module = 2, teeth = 20, thickness = 6, centerhole = 5 } = params || {}
+  const { diameter = 40, thickness = 8, boreDiameter = 6, module = 1, pressureAngle = 20 } = params || {}
   const printerSettings = {
     scale: 1,
     correctionInsideDiameter: 0,
@@ -1035,12 +1039,7 @@ function main(params) {
     correctionOutsideDiameterMoving: 0,
     resolutionCircle: 360,
   }
-  const gear = new window.jscad.tspi.involuteGear(printerSettings, {
-    module,
-    teethNumber: teeth,
-    thickness,
-    centerholeRadius: centerhole,
-  })
+  const gear = window.jscad.tspi.gear(printerSettings, diameter, thickness, boreDiameter, module, pressureAngle)
   return unwrap(gear.getModel())
 }
 module.exports = { main, getParameterDefinitions }
