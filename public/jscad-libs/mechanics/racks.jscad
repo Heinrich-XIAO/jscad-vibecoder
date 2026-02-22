@@ -119,9 +119,9 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 		var translateOffset = [0, 0, -this.thickness / 2.0];
 		var shiftedBase = baseBar.translate(translateOffset);
 		if (rackTeeth) {
-			return [booleans.union(shiftedBase, rackTeeth.translate(translateOffset))];
+			return union(shiftedBase, rackTeeth.translate(translateOffset));
 		}
-		return [shiftedBase];
+		return shiftedBase;
 	};
 };
 
