@@ -157,7 +157,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     <div className={`flex flex-col h-full bg-card ${className}`}>
       {/* Header */}
       <div
-        className={`flex items-center gap-2 px-4 py-2 border-b border-border ${headerDraggable ? "cursor-move" : ""}`}
+        className={`flex items-center gap-2 px-4 py-2 ${headerDraggable ? "cursor-move" : ""}`}
         draggable={headerDraggable}
         onDragStart={onHeaderDragStart}
         onDragEnd={onHeaderDragEnd}

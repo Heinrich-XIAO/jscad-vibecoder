@@ -736,7 +736,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     <div className="flex flex-col h-full bg-card">
       {/* Header */}
       <div
-        className={`flex items-center gap-2 px-4 py-2 border-b border-border ${headerDraggable ? "cursor-move" : ""}`}
+        className={`flex items-center gap-2 px-4 py-2 ${headerDraggable ? "cursor-move" : ""}`}
         draggable={headerDraggable}
         onDragStart={onHeaderDragStart}
         onDragEnd={onHeaderDragEnd}
@@ -801,7 +801,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       {/* Input */}
       <form
         onSubmit={handleSubmit}
-        className="border-t border-border p-3"
+        className="p-3"
       >
         <div className="relative h-full">
           <textarea
