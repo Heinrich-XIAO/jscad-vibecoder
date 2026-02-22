@@ -453,32 +453,9 @@ export function ChatPanel({
     const canAutoName = projectName
       ? defaultProjectNames.has(projectName.trim().toLowerCase())
       : false;
-    if (!hasUserMessages && canAutoName) {
-      let derivedName = deriveProjectName(prompt);
-      const settings = getOpenRouterSettings();
-      const suggestedName = await requestProjectTitle(prompt, settings.apiKey);
-      if (suggestedName) {
-        derivedName = suggestedName;
-      }
-      if (
-        derivedName &&
-        projectName &&
-        derivedName.toLowerCase() !== projectName.trim().toLowerCase()
-      ) {
-        try {
-          await updateProject({
-            id: projectId as Id<"projects">,
-            ownerId,
-            name: derivedName,
-          });
-        } catch (error) {
-          console.warn("Failed to auto-rename project:", error);
-        }
-      }
-    }
 
-    // Add user message
-    await onAddMessage(
+    // Add user message immediately for optimistic rendering.
+    void onAddMessage(
       {
         role: "user",
         content: prompt,
@@ -486,12 +463,38 @@ export function ChatPanel({
       { optimistic: true }
     );
 
+    if (!hasUserMessages && canAutoName) {
+      void (async () => {
+        let derivedName = deriveProjectName(prompt);
+        const settings = getOpenRouterSettings();
+        const suggestedName = await requestProjectTitle(prompt, settings.apiKey);
+        if (suggestedName) {
+          derivedName = suggestedName;
+        }
+        if (
+          derivedName &&
+          projectName &&
+          derivedName.toLowerCase() !== projectName.trim().toLowerCase()
+        ) {
+          try {
+            await updateProject({
+              id: projectId as Id<"projects">,
+              ownerId,
+              name: derivedName,
+            });
+          } catch (error) {
+            console.warn("Failed to auto-rename project:", error);
+          }
+        }
+      })();
+    }
+
     await generateResponse(prompt);
   };
 
   const handleRetry = useCallback(async (prompt: string) => {
     if (!prompt.trim() || isGenerating) return;
-    await onAddMessage(
+    void onAddMessage(
       {
         role: "user",
         content: prompt,
