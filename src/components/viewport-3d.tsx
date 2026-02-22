@@ -10,6 +10,7 @@ export interface Viewport3DHandle {
   zoomIn: () => void;
   zoomOut: () => void;
   reset: () => void;
+  captureImage: () => string | null;
 }
 
 interface Viewport3DProps {
@@ -81,6 +82,21 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
       setRotation({ x: -30, y: 45 });
       setZoom(50);
     },
+    captureImage: () => {
+      const renderer = rendererRef.current;
+      const scene = sceneRef.current;
+      const camera = cameraRef.current;
+      if (!renderer || !scene || !camera) {
+        return null;
+      }
+      renderer.render(scene, camera);
+      try {
+        return renderer.domElement.toDataURL("image/png");
+      } catch (error) {
+        console.warn("Failed to capture viewport image", error);
+        return null;
+      }
+    },
   }));
 
   // Initialize Three.js scene
@@ -102,7 +118,7 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     cameraRef.current = camera;
 
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);

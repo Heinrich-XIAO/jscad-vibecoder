@@ -29,6 +29,7 @@
   - rerun until no phase misalignment remains
 - Added tests for metadata exposure and animation diagnostic tool wiring.
 - Gear library now aligns the initial phase to half the tooth thickness (no gap), matching rack-centered expectations.
+- Added a viewport snapshot button that captures the current 3D view and injects the image into the chat prompt for richer context.
 
 ## Notes
 - Metadata changes are additive and do not change existing `getModel()` behavior.

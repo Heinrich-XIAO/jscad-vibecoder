@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect, useMemo, type DragEvent } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo, type DragEvent, forwardRef, useImperativeHandle } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -79,6 +79,11 @@ type StreamEvent =
     }
   | { type: "error"; message: string };
 
+export interface ChatPanelHandle {
+  appendToInput: (content: string) => void;
+  focusInput: () => void;
+}
+
 interface ChatPanelProps {
   projectId: string;
   projectName?: string;
@@ -137,18 +142,21 @@ async function requestProjectTitle(prompt: string, apiKey: string) {
   }
 }
 
-export function ChatPanel({
-  projectId,
-  projectName,
-  currentCode,
-  onCodeChange,
-  onPromptComplete,
-  inputRef: externalInputRef,
-  ownerId,
-  headerDraggable = false,
-  onHeaderDragStart,
-  onHeaderDragEnd,
-}: ChatPanelProps) {
+export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function ChatPanel(
+  {
+    projectId,
+    projectName,
+    currentCode,
+    onCodeChange,
+    onPromptComplete,
+    inputRef: externalInputRef,
+    ownerId,
+    headerDraggable = false,
+    onHeaderDragStart,
+    onHeaderDragEnd,
+  }: ChatPanelProps,
+  ref
+) {
   const [pendingMessages, setPendingMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -161,6 +169,28 @@ export function ChatPanel({
   
   // Use external ref if provided, otherwise internal
   const inputRef = (externalInputRef || internalInputRef) as React.RefObject<HTMLTextAreaElement>;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      appendToInput: (content: string) => {
+        setInput((prev) => {
+          const trimmedPrev = prev.trimEnd();
+          if (!trimmedPrev) {
+            return content;
+          }
+          return `${trimmedPrev}\n\n${content}`;
+        });
+        requestAnimationFrame(() => {
+          inputRef.current?.focus();
+        });
+      },
+      focusInput: () => {
+        inputRef.current?.focus();
+      },
+    }),
+    [inputRef]
+  );
 
   // Convex hooks for chat persistence
   const convexMessages = useQuery(api.chat.list, {
@@ -721,7 +751,7 @@ export function ChatPanel({
       </form>
     </div>
   );
-}
+});
 
 function MessageBubble({
   message,

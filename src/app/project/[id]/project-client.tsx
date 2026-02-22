@@ -5,8 +5,8 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
-import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Undo2, Redo2, Box } from "lucide-react";
-import { ChatPanel } from "@/components/chat-panel";
+import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Undo2, Redo2, Box, Camera } from "lucide-react";
+import { ChatPanel, type ChatPanelHandle } from "@/components/chat-panel";
 import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
 import { Viewport3D, type Viewport3DHandle } from "@/components/viewport-3d";
 import { ParameterSliders, type ParameterSlidersHandle } from "@/components/parameter-sliders";
@@ -139,6 +139,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [geometry, setGeometry] = useState<unknown[]>([]);
   const [error, setError] = useState<JscadExecutionError | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSnapshotting, setIsSnapshotting] = useState(false);
   
   // Undo/redo for code editor
   const {
@@ -166,6 +167,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [draggingPane, setDraggingPane] = useState<PaneId | null>(null);
   const [dropTarget, setDropTarget] = useState<{ paneId: PaneId; zone: DropZone } | null>(null);
   const [isResizing, setIsResizing] = useState(false);
+  const chatPanelRef = useRef<ChatPanelHandle>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const hasAutoFocusedChatRef = useRef(false);
   const viewportRef = useRef<Viewport3DHandle>(null);
@@ -192,6 +194,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   } | null>(null);
 
   const { execute } = useJscadWorker();
+  const geometryCount = geometry.length;
 
   const isChatVisible = showChat && !!projectId && !!userId;
 
@@ -411,6 +414,36 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const handlePromptComplete = useCallback(() => {
     void autosaveDraft();
   }, [autosaveDraft]);
+
+  const handleInsertViewportSnapshot = useCallback(() => {
+    if (!viewportRef.current?.captureImage) {
+      console.warn("Viewport renderer is not ready for capture yet.");
+      return;
+    }
+    if (geometryCount === 0) {
+      return;
+    }
+    setIsSnapshotting(true);
+    try {
+      const dataUrl = viewportRef.current.captureImage();
+      if (!dataUrl) {
+        console.warn("Viewport capture returned no data.");
+        return;
+      }
+      const timestamp = new Date().toLocaleString();
+      const snapshotMarkdown = `Viewport snapshot (${timestamp})\n![Viewport snapshot ${timestamp}](${dataUrl})`;
+      chatPanelRef.current?.appendToInput(snapshotMarkdown);
+      if (!showChat) {
+        setShowChat(true);
+      }
+      setActivePane("chat");
+      chatPanelRef.current?.focusInput();
+    } catch (error) {
+      console.error("Failed to capture viewport snapshot", error);
+    } finally {
+      setIsSnapshotting(false);
+    }
+  }, [geometryCount, showChat]);
 
   useEffect(() => {
     if (!visiblePaneIds.includes(activePane) && visiblePaneIds.length > 0) {
@@ -943,6 +976,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
         {paneId === "chat" && projectId && userId && (
           <ChatPanel
+            ref={chatPanelRef}
             projectId={projectId}
             projectName={project?.name}
             currentCode={code}
@@ -978,6 +1012,17 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             >
               <Box className="w-4 h-4 text-cyan-500" />
               <h2 className="text-sm font-medium text-foreground">Viewport</h2>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={handleInsertViewportSnapshot}
+                  disabled={isSnapshotting || geometryCount === 0 || isGenerating}
+                  className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/70 disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={geometryCount === 0 ? "Run code to capture a model snapshot" : "Insert the current view into your next prompt"}
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  {isSnapshotting ? "Adding Snapshot..." : "Add Snapshot"}
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 min-h-0">
