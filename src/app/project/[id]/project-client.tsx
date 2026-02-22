@@ -1100,20 +1100,17 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             >
               <Box className="w-4 h-4 text-cyan-500" />
               <h2 className="text-sm font-medium text-foreground">Viewport</h2>
-              <div className="ml-auto flex items-center gap-2">
-                <button
-                  onClick={handleInsertViewportSnapshot}
-                  disabled={isSnapshotting || geometryCount === 0 || isGenerating}
-                  className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/70 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title={geometryCount === 0 ? "Run code to capture a model snapshot" : "Insert the current view into your next prompt"}
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                  {isSnapshotting ? "Adding Snapshot..." : "Add Snapshot"}
-                </button>
-              </div>
             </div>
 
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 relative">
+              <button
+                onClick={handleInsertViewportSnapshot}
+                disabled={isSnapshotting || geometryCount === 0 || isGenerating}
+                className="absolute top-2 right-2 z-10 p-2 rounded-md bg-background/90 border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                title={geometryCount === 0 ? "Run code to capture a model snapshot" : "Insert the current view into your next prompt"}
+              >
+                <Camera className="w-4 h-4" />
+              </button>
               <Viewport3D
                 geometry={geometry}
                 isGenerating={isGenerating}
