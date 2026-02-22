@@ -547,33 +547,26 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
     if (visiblePaneIds.length === 3) {
       const targetIndex = visiblePaneIds.indexOf(targetPane);
-      if (targetIndex === 1) {
-        setLayoutMode("rows");
-        setPaneOrder((current) => {
-          const visible = current.filter((id) => visiblePaneIds.includes(id));
-          const reordered = insertAroundTarget(visible, draggingPane, targetPane, zone === "top" ? "left" : "right");
-          let cursor = 0;
-          return current.map((id) => {
-            if (!visiblePaneIds.includes(id)) return id;
-            const next = reordered[cursor];
-            cursor += 1;
-            return next;
-          });
-        });
-        clearPaneDrag();
-        return;
-      }
-
+      const sourceIndex = visiblePaneIds.indexOf(draggingPane);
       const remaining = visiblePaneIds.find((id) => id !== draggingPane && id !== targetPane);
-      if (remaining) {
+
+      if (targetIndex !== -1 && sourceIndex !== -1 && remaining) {
         const stackTop = zone === "top" ? draggingPane : targetPane;
         const stackBottom = zone === "top" ? targetPane : draggingPane;
 
-        if (targetIndex === 0) {
-          setLayoutMode("rightStack");
+        const nextLayoutMode: LayoutMode =
+          targetIndex === 0
+            ? "rightStack"
+            : targetIndex === 2
+              ? "leftStack"
+              : sourceIndex > targetIndex
+                ? "leftStack"
+                : "rightStack";
+
+        setLayoutMode(nextLayoutMode);
+        if (nextLayoutMode === "rightStack") {
           setPaneOrder([stackTop, stackBottom, remaining]);
         } else {
-          setLayoutMode("leftStack");
           setPaneOrder([remaining, stackTop, stackBottom]);
         }
       }
@@ -683,9 +676,13 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         const pairTotal = startLeft + startRight;
         const minLeft = (activeResize.axis === "x" ? MIN_PANE_WIDTH[leftId] : MIN_PANE_HEIGHT[leftId]) / activeResize.containerSize;
         const minRight = (activeResize.axis === "x" ? MIN_PANE_WIDTH[rightId] : MIN_PANE_HEIGHT[rightId]) / activeResize.containerSize;
+        const minTotal = minLeft + minRight;
+        const minScale = minTotal > pairTotal && minTotal > 0 ? pairTotal / minTotal : 1;
+        const effectiveMinLeft = minLeft * minScale;
+        const effectiveMinRight = minRight * minScale;
 
         let nextLeft = startLeft + deltaRatio;
-        nextLeft = Math.max(minLeft, Math.min(pairTotal - minRight, nextLeft));
+        nextLeft = Math.max(effectiveMinLeft, Math.min(pairTotal - effectiveMinRight, nextLeft));
         const nextRight = pairTotal - nextLeft;
 
         setPaneRatios((current) => {
@@ -712,8 +709,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         const startRatio = activeResize.startStackSecondaryRatio ?? stackSecondaryRatio;
         const minTop = MIN_PANE_HEIGHT[activeResize.topId] / activeResize.containerSize;
         const minBottom = MIN_PANE_HEIGHT[activeResize.bottomId] / activeResize.containerSize;
+        const minTotal = minTop + minBottom;
+        const minScale = minTotal > 1 && minTotal > 0 ? 1 / minTotal : 1;
+        const effectiveMinTop = minTop * minScale;
+        const effectiveMinBottom = minBottom * minScale;
         let next = startRatio + deltaRatio;
-        next = Math.max(minTop, Math.min(1 - minBottom, next));
+        next = Math.max(effectiveMinTop, Math.min(1 - effectiveMinBottom, next));
         setStackSecondaryRatio(next);
       }
     };
