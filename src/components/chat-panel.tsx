@@ -92,14 +92,16 @@ interface PromptImageAttachment {
 }
 
 interface ChatPanelProps {
-  projectId: string;
+  projectId?: string;
   projectName?: string;
   currentCode: string;
   onCodeChange: (code: string) => void;
   onPromptComplete?: () => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
   requestViewportSnapshot?: () => { url: string; altText?: string } | null;
-  ownerId: string;
+  ownerId?: string | null;
+  isAgentEnabled?: boolean;
+  agentDisabledMessage?: string;
   headerDraggable?: boolean;
   onHeaderDragStart?: (event: DragEvent<HTMLDivElement>) => void;
   onHeaderDragEnd?: () => void;
@@ -160,12 +162,16 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     inputRef: externalInputRef,
     requestViewportSnapshot,
     ownerId,
+    isAgentEnabled,
+    agentDisabledMessage,
     headerDraggable = false,
     onHeaderDragStart,
     onHeaderDragEnd,
   }: ChatPanelProps,
   ref
 ) {
+  const canUseAgent = isAgentEnabled ?? Boolean(projectId && ownerId);
+  const disabledMessage = agentDisabledMessage ?? "You are not logged in. Sign in to use the agent.";
   const [pendingMessages, setPendingMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [pendingImages, setPendingImages] = useState<PromptImageAttachment[]>([]);
@@ -199,10 +205,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   );
 
   // Convex hooks for chat persistence
-  const convexMessages = useQuery(api.chat.list, {
-    projectId: projectId as Id<"projects">,
-    ownerId,
-  });
+  const chatListArgs = canUseAgent && projectId && ownerId
+    ? { projectId: projectId as Id<"projects">, ownerId }
+    : "skip";
+  const convexMessages = useQuery(api.chat.list, chatListArgs);
   const sendMessage = useMutation(api.chat.send);
   const enqueuePrompt = useMutation(api.chat.enqueuePrompt);
   const claimNextPrompt = useMutation(api.chat.claimNextPrompt);
@@ -210,10 +216,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   const completePrompt = useMutation(api.chat.completePrompt);
   const failPrompt = useMutation(api.chat.failPrompt);
   const updateProject = useMutation(api.projects.update);
-  const queueState = useQuery(api.chat.listQueue, {
-    projectId: projectId as Id<"projects">,
-    ownerId,
-  });
+  const queueStateArgs = canUseAgent && projectId && ownerId
+    ? { projectId: projectId as Id<"projects">, ownerId }
+    : "skip";
+  const queueState = useQuery(api.chat.listQueue, queueStateArgs);
 
   const loadedMessages = useMemo<ChatMessage[]>(() => {
     if (!convexMessages) return [];
@@ -243,6 +249,14 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
 
   const persistMessage = useCallback(
     async (message: Omit<ChatMessage, "id">, pendingId: string) => {
+      if (!canUseAgent || !projectId || !ownerId) {
+        setPendingMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === pendingId ? { ...msg, pendingStatus: "sent" } : msg
+          )
+        );
+        return;
+      }
       try {
         const persisted = await sendMessage({
           projectId: projectId as Id<"projects">,
@@ -271,7 +285,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         }
       }
     },
-    [ownerId, projectId, sendMessage]
+    [canUseAgent, ownerId, projectId, sendMessage]
   );
 
   const onAddMessage = useCallback(async (message: Omit<ChatMessage, "id">, options?: { optimistic?: boolean }) => {
@@ -293,6 +307,26 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
 
   const enqueueUserPrompt = useCallback(
     async (prompt: string, promptImages: Array<{ url: string; altText?: string }> = []) => {
+      if (!canUseAgent || !projectId || !ownerId) {
+        const pendingId = `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`;
+        setPendingMessages((prev) => [
+          ...prev,
+          {
+            id: pendingId,
+            role: "user",
+            content: prompt,
+            pendingStatus: "sent",
+          },
+          {
+            id: `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`,
+            role: "system",
+            content: `Error: ${disabledMessage}`,
+            pendingStatus: "sent",
+          },
+        ]);
+        return;
+      }
+
       const pendingId = `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`;
       const imageSummary = promptImages.length > 0 ? `\n\n[${promptImages.length} image attachment${promptImages.length === 1 ? "" : "s"}]` : "";
       setPendingMessages((prev) => [
@@ -330,7 +364,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         );
       }
     },
-    [enqueuePrompt, ownerId, projectId]
+    [canUseAgent, disabledMessage, enqueuePrompt, ownerId, projectId]
   );
 
   const onCodeUpdate = useCallback((code: string) => {
@@ -543,6 +577,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   }, [currentCode, onAddMessage, onCodeUpdate, onPromptComplete, requestViewportSnapshot]);
 
   useEffect(() => {
+    if (!canUseAgent || !projectId || !ownerId) return;
     if (!queueState) return;
     if (queueWorkerActiveRef.current) return;
 
@@ -600,6 +635,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       }
     })();
   }, [
+    canUseAgent,
     claimNextPrompt,
     completePrompt,
     failPrompt,
@@ -621,6 +657,25 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     }));
     setInput("");
     setPendingImages([]);
+
+    if (!canUseAgent || !projectId || !ownerId) {
+      setPendingMessages((prev) => [
+        ...prev,
+        {
+          id: `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`,
+          role: "user",
+          content: prompt,
+          pendingStatus: "sent",
+        },
+        {
+          id: `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`,
+          role: "system",
+          content: `Error: ${disabledMessage}`,
+          pendingStatus: "sent",
+        },
+      ]);
+      return;
+    }
 
     const hasUserMessages = displayedMessages.some((msg) => msg.role === "user");
     const canAutoName = projectName
@@ -645,10 +700,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         ) {
           try {
             await updateProject({
-              id: projectId as Id<"projects">,
-              ownerId,
-              name: derivedName,
-            });
+                id: projectId as Id<"projects">,
+                ownerId,
+                name: derivedName,
+              });
           } catch (error) {
             console.warn("Failed to auto-rename project:", error);
           }

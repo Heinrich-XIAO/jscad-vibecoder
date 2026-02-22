@@ -39,6 +39,9 @@
   - when dropping viewport onto code (top/bottom), chat stays as the single pane on the opposite side and code+viewport stack vertically
 - Tuned chat input padding with image attachments so adding an image only increases input bottom space slightly (roughly thumbnail height) instead of causing a large jump.
 - Rebalanced default 3-pane ratios to prioritize viewport visibility on initial load, reducing cases where the viewport starts too cramped on narrower windows.
+- Added initial narrow-window auto-compaction: when 3 columns cannot fit pane minimum widths, layout now switches to a side-stack (code+viewport stacked, chat opposite) so viewport is immediately visible.
+- Made `/project/:id` accessible while signed out for local layout debugging: project page now loads in guest mode with starter code and a visible viewport.
+- In guest mode, chat attempts now return a clear auth error (`You are not logged in. Sign in to use the agent.`) instead of trying to run the agent.
 - Added a codegen tool `get_viewport_snapshot` so the agent can request the current 3D viewport image during a run; tool responses now attach the snapshot as multimodal image content when available.
 
 ## Notes

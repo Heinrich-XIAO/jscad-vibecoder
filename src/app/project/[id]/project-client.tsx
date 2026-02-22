@@ -53,6 +53,15 @@ const MIN_PANE_HEIGHT: Record<PaneId, number> = {
   viewport: 220,
 };
 
+const GUEST_STARTER_CODE = `const { cuboid } = require('@jscad/modeling').primitives
+
+function main() {
+  return [cuboid({ size: [20, 20, 20] })]
+}
+
+module.exports = { main }
+`;
+
 function normalizeRatios(ids: PaneId[], ratios: Record<PaneId, number>) {
   const total = ids.reduce((sum, id) => sum + Math.max(0.01, ratios[id] ?? 0.01), 0);
   const normalized: Record<PaneId, number> = {
@@ -167,6 +176,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [draggingPane, setDraggingPane] = useState<PaneId | null>(null);
   const [dropTarget, setDropTarget] = useState<{ paneId: PaneId; zone: DropZone } | null>(null);
   const [isResizing, setIsResizing] = useState(false);
+  const [layoutWidth, setLayoutWidth] = useState(0);
   const chatPanelRef = useRef<ChatPanelHandle>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const hasAutoFocusedChatRef = useRef(false);
@@ -192,11 +202,13 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     startStackSecondaryRatio?: number;
     containerSize: number;
   } | null>(null);
+  const hasAutoCompactedInitialLayoutRef = useRef(false);
 
   const { execute } = useJscadWorker();
   const geometryCount = geometry.length;
+  const isSignedIn = !!userId;
 
-  const isChatVisible = showChat && !!projectId && !!userId;
+  const isChatVisible = showChat;
 
   const visiblePaneIds = useMemo(() => {
     return paneOrder.filter((id) => {
@@ -215,6 +227,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       lastPersistedCodeRef.current = project.currentVersion.jscadCode;
     }
   }, [project, code, resetCode]);
+
+  useEffect(() => {
+    if (isSignedIn || code) return;
+    resetCode(GUEST_STARTER_CODE);
+    lastPersistedCodeRef.current = GUEST_STARTER_CODE;
+  }, [code, isSignedIn, resetCode]);
 
   useEffect(() => {
     if (!focusChatParam || !projectId || hasAutoFocusedChatRef.current) return;
@@ -480,6 +498,38 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       setLayoutMode("columns");
     }
   }, [layoutMode, visiblePaneIds.length]);
+
+  useEffect(() => {
+    const container = layoutRef.current;
+    if (!container) return;
+
+    const updateWidth = () => {
+      setLayoutWidth(container.clientWidth);
+    };
+
+    updateWidth();
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(container);
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (hasAutoCompactedInitialLayoutRef.current) return;
+    if (layoutMode !== "columns") return;
+    if (visiblePaneIds.length !== 3) return;
+    if (layoutWidth <= 0) return;
+
+    const minColumnsWidth = visiblePaneIds.reduce((sum, paneId) => sum + MIN_PANE_WIDTH[paneId], 0) + 3;
+    if (layoutWidth >= minColumnsWidth) return;
+
+    hasAutoCompactedInitialLayoutRef.current = true;
+    setLayoutMode("rightStack");
+    setPaneOrder(["code", "viewport", "chat"]);
+    setStackPrimaryRatio(0.62);
+    setStackSecondaryRatio(0.5);
+  }, [layoutMode, layoutWidth, visiblePaneIds]);
 
   const resolveDropZone = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -969,13 +1019,23 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
   useKeyboardShortcuts(shortcuts);
 
-  if (!project) {
+  if (isSignedIn && project === undefined) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-muted-foreground">Loading project...</div>
       </div>
     );
   }
+
+  if (isSignedIn && project === null) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-muted-foreground">Project not found.</div>
+      </div>
+    );
+  }
+
+  const displayProjectName = project?.name ?? "Guest Project";
 
   const activeDropPane = dropTarget?.paneId ?? null;
   const activeDropZone = dropTarget?.zone ?? null;
@@ -999,17 +1059,19 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         {showDrop && activeDropZone === "bottom" && <div className="absolute left-0 right-0 bottom-0 h-1.5 bg-primary/70 pointer-events-none z-20" />}
         {showDrop && activeDropZone === "center" && <div className="absolute inset-0 border-2 border-primary/70 pointer-events-none z-20" />}
 
-        {paneId === "chat" && projectId && userId && (
+        {paneId === "chat" && (
           <ChatPanel
             ref={chatPanelRef}
-            projectId={projectId}
-            projectName={project?.name}
+            projectId={projectId ?? id}
+            projectName={displayProjectName}
             currentCode={code}
             onCodeChange={handleCodeChange}
             onPromptComplete={handlePromptComplete}
             inputRef={chatInputRef}
             requestViewportSnapshot={requestViewportSnapshot}
             ownerId={userId}
+            isAgentEnabled={isSignedIn && !!projectId}
+            agentDisabledMessage="You are not logged in. Sign in to use the agent."
             headerDraggable={visiblePaneIds.length > 1}
             onHeaderDragStart={(event) => handlePaneDragStart("chat", event)}
             onHeaderDragEnd={clearPaneDrag}
@@ -1116,7 +1178,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="font-semibold text-lg">{project.name}</h1>
+            <h1 className="font-semibold text-lg">{displayProjectName}</h1>
             <div className="flex items-center gap-3">
               <p className="text-xs text-muted-foreground">
                 {versions?.length || 0} versions
@@ -1308,7 +1370,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         isOpen={showExport}
         onClose={() => setShowExport(false)}
         geometry={geometry}
-        projectName={project.name}
+        projectName={displayProjectName}
       />
       <SettingsDialog
         isOpen={showSettings}
