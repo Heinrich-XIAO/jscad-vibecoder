@@ -1190,6 +1190,15 @@ measure_geometry(geometry="rack", rackParams={ module: 1 })
 // Returns: { pitchLine: { module: 1, description: "..." } }
 \`\`\`
 
+### Mechanism Motion Contract (Metadata-First)
+For mechanisms, always model motion around one normalized input variable:
+- Define one primary motion parameter: \`progress\` in [0, 1].
+- Express all part motion as functions of \`progress\` (avoid unsynchronized independent motion sliders).
+- Prefer pitch-feature metadata from supported libraries (gear/rack helpers) when available.
+- If metadata is missing, use autodetection via measurements/known params, and state assumptions when confidence is low.
+- For meshing parts (gears/racks), use position_relative + check_alignment and avoid manual translate math.
+- Target behavior: infer relationships from pitch features, solve a feasible shared ROM, then animate only within that solved range.
+
 ## External Libraries
 - You may load remote helper libraries via include("https://...") for side-effect scripts.
 - You may require remote modules via require("https://...") when they export functions.
