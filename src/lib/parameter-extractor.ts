@@ -15,6 +15,65 @@ export interface ExtractedParameter {
   choices?: string[];
 }
 
+function extractParameterArrayContent(code: string): string | null {
+  const startMatch = code.match(/(?:function\s+getParameterDefinitions\s*\(\s*\)|(?:const|let|var)\s+getParameterDefinitions\s*=)/);
+
+  if (!startMatch || startMatch.index === undefined) {
+    return null;
+  }
+
+  const startIndex = startMatch.index;
+  const arrayStart = code.indexOf("[", startIndex);
+
+  if (arrayStart === -1) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString: "'" | '"' | "`" | null = null;
+  let escaped = false;
+
+  for (let i = arrayStart; i < code.length; i++) {
+    const ch = code[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (ch === inString) {
+        inString = null;
+      }
+      continue;
+    }
+
+    if (ch === "'" || ch === '"' || ch === "`") {
+      inString = ch;
+      continue;
+    }
+
+    if (ch === "[") {
+      depth += 1;
+      continue;
+    }
+
+    if (ch === "]") {
+      depth -= 1;
+      if (depth === 0) {
+        return code.slice(arrayStart + 1, i);
+      }
+    }
+  }
+
+  return null;
+}
+
 /**
  * Extract parameters from JSCAD code by analyzing the getParameterDefinitions function
  * and default values in destructuring patterns.
@@ -23,13 +82,11 @@ export function extractParameters(code: string): ExtractedParameter[] {
   const params: ExtractedParameter[] = [];
 
   // Try to find getParameterDefinitions
-  const paramDefMatch = code.match(
-    /getParameterDefinitions\s*(?:=\s*\(\)\s*=>|.*?function\s*\(\))\s*(?:=>)?\s*\[([^]*?)\]/
-  );
+  const definitionsContent = extractParameterArrayContent(code);
 
-  if (paramDefMatch) {
+  if (definitionsContent) {
     // Parse the array of parameter definition objects
-    const content = paramDefMatch[1];
+    const content = definitionsContent;
     const objectMatches = content.matchAll(
       /\{([^}]+)\}/g
     );
