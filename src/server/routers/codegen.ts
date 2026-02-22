@@ -1314,7 +1314,7 @@ For mechanisms, always model motion around one normalized input variable:
 - For meshing parts (gears/racks), use position_relative + check_alignment and avoid manual translate math.
 - For animated meshing diagnostics, use check_animation_intersections to compute residuals and recommended phase shifts.
 - Always eliminate phase misalignment before finalizing: run check_animation_intersections, apply the recommended phase correction, and rerun diagnostics until phase residual/misalignment is effectively zero.
-- Rack positioning convention: at progress=0, position the rack so one end (tooth tip edge) aligns at x=0. Compute the rack's half-length, then offset by that amount so the rack is centered at 0, then apply phase shift for correct tooth meshing. This gives a predictable, inspectable starting position.
+- Rack positioning convention: at progress=0, position the rack so one end (tooth tip edge) is at x=0. The rack should start at the origin and extend in the positive X direction. Apply phase shift on top of this for correct tooth meshing with the pinion.
 - Target behavior: infer relationships from pitch features, solve a feasible shared ROM, then animate only within that solved range.
 
 ## External Libraries
