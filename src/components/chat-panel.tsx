@@ -810,7 +810,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Describe what you want to build..."
-            className={`h-full min-h-[130px] w-full bg-background border border-input rounded-lg px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring ${hasPendingImages ? "pb-14" : "pb-3"}`}
+            className={`h-full w-full bg-background border border-input rounded-lg px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring ${hasPendingImages ? "min-h-[130px] pb-14" : "pb-3"}`}
             rows={6}
           />
           {hasPendingImages && (
