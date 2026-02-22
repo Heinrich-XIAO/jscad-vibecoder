@@ -671,6 +671,8 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     }
   };
 
+  const hasPendingImages = pendingImages.length > 0;
+
   return (
     <div className="flex flex-col h-full bg-card">
       {/* Header */}
@@ -749,10 +751,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Describe what you want to build..."
-            className="h-full min-h-[130px] w-full bg-background border border-input rounded-lg px-4 py-3 pr-12 pb-20 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring"
+            className={`h-full min-h-[130px] w-full bg-background border border-input rounded-lg px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring ${hasPendingImages ? "pb-14" : "pb-3"}`}
             rows={6}
           />
-          {pendingImages.length > 0 && (
+          {hasPendingImages && (
             <div className="absolute left-2 bottom-2 z-10 flex max-w-[75%] items-center gap-2 overflow-x-auto rounded-md bg-background/85 p-1 backdrop-blur-sm">
               {pendingImages.map((image) => (
                 <div
