@@ -2,7 +2,31 @@
 
 import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from "react";
 import { useTheme } from "@/lib/theme-provider";
-import * as THREE from "three";
+import {
+  BufferGeometry,
+  Float32BufferAttribute,
+  Scene,
+  Color,
+  PerspectiveCamera,
+  WebGLRenderer,
+  LineBasicMaterial,
+  LineSegments,
+  AxesHelper,
+  Group,
+  Material,
+  Mesh,
+  MeshBasicMaterial,
+  MeshPhongMaterial,
+  Vector3,
+  ConeGeometry,
+  Line,
+  EdgesGeometry,
+  DoubleSide,
+  Object3D,
+  AmbientLight,
+  DirectionalLight,
+  Light,
+} from "three";
 import { polygonVertices } from "@/lib/jscad-geometry";
 
 export interface Viewport3DHandle {
@@ -20,7 +44,7 @@ interface Viewport3DProps {
 }
 
 // Convert JSCAD geometry to Three.js BufferGeometry
-function jscadToThreeGeometry(geom: unknown): THREE.BufferGeometry | null {
+function jscadToThreeGeometry(geom: unknown): BufferGeometry | null {
   const g = geom as Record<string, unknown>;
   
   if (!g.polygons || !Array.isArray(g.polygons)) {
@@ -51,8 +75,8 @@ function jscadToThreeGeometry(geom: unknown): THREE.BufferGeometry | null {
     vertexIndex += polyVertices.length;
   }
   
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   
@@ -61,12 +85,12 @@ function jscadToThreeGeometry(geom: unknown): THREE.BufferGeometry | null {
 
 export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geometry, isGenerating, className = "" }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const meshGroupRef = useRef<THREE.Group | null>(null);
-  const gridMaterialRef = useRef<THREE.LineBasicMaterial | null>(null);
-  const axesHelperRef = useRef<THREE.AxesHelper | null>(null);
+  const sceneRef = useRef<Scene | null>(null);
+  const cameraRef = useRef<PerspectiveCamera | null>(null);
+  const rendererRef = useRef<WebGLRenderer | null>(null);
+  const meshGroupRef = useRef<Group | null>(null);
+  const gridMaterialRef = useRef<LineBasicMaterial | null>(null);
+  const axesHelperRef = useRef<AxesHelper | null>(null);
   const [rotation, setRotation] = useState({ x: -30, y: 45 });
   const [isDragging, setIsDragging] = useState(false);
   const lastPos = useRef({ x: 0, y: 0 });
@@ -108,17 +132,15 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     const height = container.clientHeight;
 
     // Scene
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1e1e1e);
+    const scene = new Scene();
+    scene.background = new Color(0x1e1e1e);
     sceneRef.current = scene;
 
-    // Camera
-    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
+    const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
     camera.position.set(0, 0, zoom);
     cameraRef.current = camera;
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    const renderer = new WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
@@ -129,7 +151,7 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     const gridDivisions = 20;
     const step = gridSize / gridDivisions;
     const gap = 2; // Small gap around axes
-    const gridGeometry = new THREE.BufferGeometry();
+    const gridGeometry = new BufferGeometry();
     const gridVertices: number[] = [];
     
     // Lines parallel to X axis (along Z) - skip lines too close to X axis (Z=0)
@@ -148,15 +170,14 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
       }
     }
     
-    gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(gridVertices, 3));
-    const gridMaterial = new THREE.LineBasicMaterial({ color: 0x2a2a3e });
+    gridGeometry.setAttribute('position', new Float32BufferAttribute(gridVertices, 3));
+    const gridMaterial = new LineBasicMaterial({ color: 0x2a2a3e });
     gridMaterialRef.current = gridMaterial;
-    const gridHelper = new THREE.LineSegments(gridGeometry, gridMaterial);
+    const gridHelper = new LineSegments(gridGeometry, gridMaterial);
     gridHelper.renderOrder = 1000;
     scene.add(gridHelper);
 
-    // Axes - render on top to avoid z-fighting with grid
-    const axesHelper = new THREE.AxesHelper(60);
+    const axesHelper = new AxesHelper(60);
     axesHelper.position.y = 0.01; // Slightly above grid
     axesHelper.renderOrder = 1001;
     // Store axes helper for dynamic theme updates
@@ -166,7 +187,7 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     const axesMatAny: any = (axesHelper as any).material;
     if (axesMatAny) {
       if (Array.isArray(axesMatAny)) {
-        axesMatAny.forEach((m: THREE.Material) => { try { (m as any).depthTest = false; } catch (_) {} });
+        axesMatAny.forEach((m: Material) => { try { (m as any).depthTest = false; } catch (_) {} });
       } else {
         try { (axesMatAny as any).depthTest = false; } catch (_) {}
       }
@@ -174,7 +195,7 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     scene.add(axesHelper);
 
     // Mesh group to hold all geometry
-    const meshGroup = new THREE.Group();
+    const meshGroup = new Group();
     scene.add(meshGroup);
     meshGroupRef.current = meshGroup;
 
@@ -215,7 +236,7 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     if (!scene || !renderer) return;
 
     const bgColor = isDark ? 0x0a0a0a : 0xfafafa;
-    scene.background = new THREE.Color(bgColor);
+    scene.background = new Color(bgColor);
     renderer.setClearColor(bgColor);
 
     // Update grid color
@@ -230,56 +251,48 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
         // AxesHelper in three.js renders 3 lines; materials may be a single material or array
         // We'll create a small custom axes group with distinct RGB colors so axes remain visible and distinctive.
 
-        const customAxes = new THREE.Group();
+        const customAxes = new Group();
         customAxes.name = "custom_axes_rgb";
         const axisLength = 60;
-
-        // X axis - pure red (255,0,0)
-const xMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-const xGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(axisLength, 0.01, 0)]);
-const xLine = new THREE.Line(xGeom, xMat);
-customAxes.add(xLine);
-        // X axis arrowhead (cone pointing +X)
         const coneRadius = 0.6;
         const coneHeight = 1.4;
         const coneSegments = 12;
-        const xConeGeom = new THREE.ConeGeometry(coneRadius, coneHeight, coneSegments);
-        const xConeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-        const xCone = new THREE.Mesh(xConeGeom, xConeMat);
+
+        const xMat = new MeshBasicMaterial({ color: 0xff0000 });
+        const xGeom = new BufferGeometry().setFromPoints([new Vector3(0, 0.01, 0), new Vector3(axisLength, 0.01, 0)]);
+        const xLine = new Line(xGeom, xMat);
+        customAxes.add(xLine);
+        const xConeGeom = new ConeGeometry(coneRadius, coneHeight, coneSegments);
+        const xConeMat = new MeshBasicMaterial({ color: 0xff0000 });
+        const xCone = new Mesh(xConeGeom, xConeMat);
         xCone.position.set(axisLength + coneHeight / 2, 0.01, 0);
         xCone.rotateZ(-Math.PI / 2);
         customAxes.add(xCone);
 
-        // Y axis - pure green (0,255,0)
-const yMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-const yGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(0, axisLength, 0)]);
-const yLine = new THREE.Line(yGeom, yMat);
-customAxes.add(yLine);
-        // Y axis arrowhead (cone pointing +Y)
-        const yConeGeom = new THREE.ConeGeometry(coneRadius, coneHeight, coneSegments);
-        const yConeMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-        const yCone = new THREE.Mesh(yConeGeom, yConeMat);
+        const yMat = new MeshBasicMaterial({ color: 0x00ff00 });
+        const yGeom = new BufferGeometry().setFromPoints([new Vector3(0, 0.01, 0), new Vector3(0, axisLength, 0)]);
+        const yLine = new Line(yGeom, yMat);
+        customAxes.add(yLine);
+        const yConeGeom = new ConeGeometry(coneRadius, coneHeight, coneSegments);
+        const yConeMat = new MeshBasicMaterial({ color: 0x00ff00 });
+        const yCone = new Mesh(yConeGeom, yConeMat);
         yCone.position.set(0, axisLength + coneHeight / 2, 0.01);
         customAxes.add(yCone);
 
-        // Z axis - pure blue (0,0,255)
-const zMat = new THREE.MeshBasicMaterial({ color: 0x0000ff });
-const zGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, 0), new THREE.Vector3(0, 0.01, axisLength)]);
-const zLine = new THREE.Line(zGeom, zMat);
-customAxes.add(zLine);
-        // Z axis arrowhead (cone pointing +Z)
-        const zConeGeom = new THREE.ConeGeometry(coneRadius, coneHeight, coneSegments);
-        const zConeMat = new THREE.MeshBasicMaterial({ color: 0x0000ff });
-        const zCone = new THREE.Mesh(zConeGeom, zConeMat);
+        const zMat = new MeshBasicMaterial({ color: 0x0000ff });
+        const zGeom = new BufferGeometry().setFromPoints([new Vector3(0, 0.01, 0), new Vector3(0, 0.01, axisLength)]);
+        const zLine = new Line(zGeom, zMat);
+        customAxes.add(zLine);
+        const zConeGeom = new ConeGeometry(coneRadius, coneHeight, coneSegments);
+        const zConeMat = new MeshBasicMaterial({ color: 0x0000ff });
+        const zCone = new Mesh(zConeGeom, zConeMat);
         zCone.position.set(0, 0.01, axisLength + coneHeight / 2);
         zCone.rotateX(Math.PI / 2);
         customAxes.add(zCone);
 
         customAxes.renderOrder = 1002;
 
-        // Attach to axes parent if available, otherwise attach to scene root
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const attachTarget = ((axes.parent ?? sceneRef.current) as any) as THREE.Object3D;
+        const attachTarget = ((axes.parent ?? sceneRef.current) as any) as Object3D;
         if (attachTarget) {
           const existingCustom = attachTarget.getObjectByName("custom_axes_rgb");
           if (existingCustom) attachTarget.remove(existingCustom);
@@ -357,10 +370,10 @@ customAxes.add(zLine);
     // Clear existing meshes
     while (group.children.length > 0) {
       const child = group.children[0];
-      if (child instanceof THREE.Mesh) {
+      if (child instanceof Mesh) {
         child.geometry.dispose();
         if (Array.isArray(child.material)) {
-          child.material.forEach(m => m.dispose());
+          child.material.forEach((m: Material) => m.dispose());
         } else {
           child.material.dispose();
         }
@@ -374,26 +387,23 @@ customAxes.add(zLine);
       const threeGeom = jscadToThreeGeometry(geom);
       if (!threeGeom) continue;
 
-      // Create solid mesh (light grey, slightly transparent)
-      const solidMaterial = new THREE.MeshPhongMaterial({
+      const solidMaterial = new MeshPhongMaterial({
         color: 0xc0c0c0,
         opacity: 0.75,
         transparent: true,
-        side: THREE.DoubleSide,
+        side: DoubleSide,
       });
-      const mesh = new THREE.Mesh(threeGeom, solidMaterial);
+      const mesh = new Mesh(threeGeom, solidMaterial);
       
-      // Create edges - only show edges where there's a significant angle change
-      const edges = new THREE.EdgesGeometry(threeGeom, 15); // threshold angle of 15 degrees
-      const lineMaterial = new THREE.LineBasicMaterial({ 
+      const edges = new EdgesGeometry(threeGeom, 15);
+      const lineMaterial = new LineBasicMaterial({ 
         color: 0x000000,
         depthTest: true,
         depthWrite: true,
       });
-      const lines = new THREE.LineSegments(edges, lineMaterial);
+      const lines = new LineSegments(edges, lineMaterial);
       
-      // Add both to a parent object
-      const obj = new THREE.Group();
+      const obj = new Group();
       obj.add(mesh);
       obj.add(lines);
       
@@ -402,15 +412,13 @@ customAxes.add(zLine);
 
     // Add lighting
     if (sceneRef.current) {
-      // Remove old lights
-      const oldLights = sceneRef.current.children.filter(c => c instanceof THREE.Light);
+      const oldLights = sceneRef.current.children.filter(c => c instanceof Light);
       oldLights.forEach(l => sceneRef.current!.remove(l));
       
-      // Add new lights
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      const ambientLight = new AmbientLight(0xffffff, 0.6);
       sceneRef.current.add(ambientLight);
       
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      const directionalLight = new DirectionalLight(0xffffff, 0.8);
       directionalLight.position.set(10, 10, 10);
       sceneRef.current.add(directionalLight);
     }
