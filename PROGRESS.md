@@ -30,6 +30,7 @@
 - Added tests for metadata exposure and animation diagnostic tool wiring.
 - Gear library now aligns the initial phase to half the tooth thickness (no gap), matching rack-centered expectations.
 - Added a viewport snapshot button that captures the current 3D view and injects the image into the chat prompt for richer context.
+- Fixed codegen prompt handling to convert markdown image attachments into true multimodal `image_url` message parts for OpenRouter models.
 
 ## Notes
 - Metadata changes are additive and do not change existing `getModel()` behavior.

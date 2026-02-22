@@ -39,13 +39,72 @@ export const codegenRouter = router({
 
 interface OpenRouterMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content?: string;
+  content?: string | OpenRouterContentPart[];
   tool_calls?: Array<{
     id: string;
     type: "function";
     function: { name: string; arguments: string };
   }>;
   tool_call_id?: string;
+}
+
+type OpenRouterContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
+const MAX_INLINE_PROMPT_IMAGES = 4;
+
+function buildUserPromptContent(prompt: string): string | OpenRouterContentPart[] {
+  const parts: OpenRouterContentPart[] = [];
+  let lastIndex = 0;
+  let imageCount = 0;
+
+  for (const match of prompt.matchAll(MARKDOWN_IMAGE_PATTERN)) {
+    const fullMatch = match[0];
+    const alt = (match[1] || "").trim();
+    const rawUrl = (match[2] || "").trim();
+    const matchIndex = match.index ?? 0;
+
+    const textSegment = prompt.slice(lastIndex, matchIndex);
+    if (textSegment.trim()) {
+      parts.push({ type: "text", text: textSegment });
+    }
+
+    const isDataImage = /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(rawUrl);
+    const isHttpImage = /^https?:\/\//i.test(rawUrl);
+
+    if ((isDataImage || isHttpImage) && imageCount < MAX_INLINE_PROMPT_IMAGES) {
+      parts.push({ type: "image_url", image_url: { url: rawUrl } });
+      imageCount += 1;
+      if (alt) {
+        parts.push({ type: "text", text: `Image note: ${alt}` });
+      }
+    } else {
+      parts.push({
+        type: "text",
+        text: fullMatch,
+      });
+    }
+
+    lastIndex = matchIndex + fullMatch.length;
+  }
+
+  const remainder = prompt.slice(lastIndex);
+  if (remainder.trim()) {
+    parts.push({ type: "text", text: remainder });
+  }
+
+  if (parts.length === 0) {
+    return prompt;
+  }
+
+  const hasImagePart = parts.some((part) => part.type === "image_url");
+  if (!hasImagePart) {
+    return prompt;
+  }
+
+  return parts;
 }
 
 function parseModelSpec(model: string) {
@@ -138,10 +197,11 @@ export async function runCodegen(
 
   const tools = buildToolDefinitions();
   const systemPrompt = buildSystemPrompt(currentCode, projectContext);
+  const userPromptContent = buildUserPromptContent(prompt);
 
   const messages: OpenRouterMessage[] = [
     { role: "system", content: systemPrompt },
-    { role: "user", content: prompt },
+    { role: "user", content: userPromptContent },
   ];
 
   const toolResults: ToolCallRecord[] = [];
@@ -168,7 +228,10 @@ export async function runCodegen(
     messages.push(assistantMessage);
 
     if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
-      const assistantContent = assistantMessage.content ?? "";
+      const assistantContent =
+        typeof assistantMessage.content === "string"
+          ? assistantMessage.content
+          : "";
 
       if (pendingRuntimeError || pendingDiagnosticsErrors > 0) {
         messages.push({
