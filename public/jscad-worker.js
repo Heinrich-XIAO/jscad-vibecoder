@@ -59,6 +59,26 @@ function sanitizeGeometry(value) {
   return clean;
 }
 
+function canonicalizeGeometry(geometry) {
+  if (!geometry || typeof geometry !== 'object') return geometry;
+
+  try {
+    // Some imported/v1-compatible geometries keep pending transforms that are
+    // only applied when converted via geom3.toPolygons(). The viewport builds
+    // meshes from polygon vertices directly, so we canonicalize here.
+    if (Array.isArray(geometry.polygons) && modeling?.geometries?.geom3?.toPolygons) {
+      const polygons = modeling.geometries.geom3.toPolygons(geometry);
+      if (Array.isArray(polygons) && polygons.length > 0) {
+        return { ...geometry, polygons };
+      }
+    }
+  } catch (_) {
+    // Fallback to original geometry when canonicalization is not possible.
+  }
+
+  return geometry;
+}
+
 function readSourceSync(url, cacheHints) {
   const xhr = new XMLHttpRequest();
   xhr.open('GET', url, false);
@@ -206,7 +226,8 @@ self.onmessage = function(e) {
       if (invalidIndex !== -1) {
         throw new Error('main() array contains an invalid geometry at index ' + invalidIndex + '.');
       }
-      const sanitizedGeometries = sanitizeGeometry(geometries);
+      const canonicalGeometries = geometries.map(canonicalizeGeometry);
+      const sanitizedGeometries = sanitizeGeometry(canonicalGeometries);
       
       self.postMessage({ 
         type: 'result', 
