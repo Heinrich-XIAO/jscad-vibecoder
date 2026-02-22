@@ -1,6 +1,6 @@
 # OpenMech - Development Progress
 
-**Last Updated:** 2026-02-21  
+**Last Updated:** 2026-02-22  
 **Current Status:** 95% Complete - Production Ready 🚀
 
 ---
@@ -83,6 +83,9 @@
 
 ### Low Priority (Nice-to-Have)
 2. **Syntax Highlighting Improvements** - Better Monaco editor JSCAD support
+
+### New Planning Artifact
+3. **Mechanism Kinematics Roadmap** - Metadata-first + autodetect fallback implementation plan documented in `docs/kinematics-roadmap.md`
 
 ---
 
