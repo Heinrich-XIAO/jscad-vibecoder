@@ -1313,6 +1313,7 @@ For mechanisms, always model motion around one normalized input variable:
 - If metadata is missing, use autodetection via measurements/known params, and state assumptions when confidence is low.
 - For meshing parts (gears/racks), use position_relative + check_alignment and avoid manual translate math.
 - For animated meshing diagnostics, use check_animation_intersections to compute residuals and recommended phase shifts.
+- Always eliminate phase misalignment before finalizing: run check_animation_intersections, apply the recommended phase correction, and rerun diagnostics until phase residual/misalignment is effectively zero.
 - Target behavior: infer relationships from pitch features, solve a feasible shared ROM, then animate only within that solved range.
 
 ## External Libraries

@@ -23,6 +23,10 @@
   - translation/rotation kinematic residuals
   - phase residuals and recommended phase shift
 - Extended prompt guidance for normalized `progress` motion contract and animation-phase diagnostics.
+- Strengthened system prompt phase guidance to require iterative phase-misalignment correction:
+  - always run diagnostics for phase residuals
+  - apply recommended phase correction
+  - rerun until no phase misalignment remains
 - Added tests for metadata exposure and animation diagnostic tool wiring.
 
 ## Notes
