@@ -1,6 +1,11 @@
 # Project Progress
 
 ## Completed
+- Added persistent chat prompt queue with FIFO processing:
+  - users can submit new prompts while an agent run is in progress
+  - prompts are stored in Convex and processed sequentially after current run
+  - queue survives refreshes/crashes with stale-runner recovery + heartbeat
+  - UI now shows queued prompt count during active generation
 - Rack helper now throws for invalid explicit length/module combinations:
   - positive `length` must be an exact multiple of `module * PI`
   - removed silent rounding to nearest tooth count for explicit lengths

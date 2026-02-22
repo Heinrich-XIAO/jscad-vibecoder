@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect, useMemo } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo, type DragEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -87,6 +87,9 @@ interface ChatPanelProps {
   onPromptComplete?: () => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
   ownerId: string;
+  headerDraggable?: boolean;
+  onHeaderDragStart?: (event: DragEvent<HTMLDivElement>) => void;
+  onHeaderDragEnd?: () => void;
 }
 
 const PENDING_MESSAGE_PREFIX = "pending-";
@@ -142,6 +145,9 @@ export function ChatPanel({
   onPromptComplete,
   inputRef: externalInputRef,
   ownerId,
+  headerDraggable = false,
+  onHeaderDragStart,
+  onHeaderDragEnd,
 }: ChatPanelProps) {
   const [pendingMessages, setPendingMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
@@ -149,6 +155,7 @@ export function ChatPanel({
   const [liveToolCalls, setLiveToolCalls] = useState<LiveToolCall[]>([]);
   const [streamStatus, setStreamStatus] = useState<string>("");
   const [liveAssistantMessage, setLiveAssistantMessage] = useState("");
+  const queueWorkerActiveRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const internalInputRef = useRef<HTMLTextAreaElement>(null);
   
@@ -161,7 +168,16 @@ export function ChatPanel({
     ownerId,
   });
   const sendMessage = useMutation(api.chat.send);
+  const enqueuePrompt = useMutation(api.chat.enqueuePrompt);
+  const claimNextPrompt = useMutation(api.chat.claimNextPrompt);
+  const heartbeatPrompt = useMutation(api.chat.heartbeatPrompt);
+  const completePrompt = useMutation(api.chat.completePrompt);
+  const failPrompt = useMutation(api.chat.failPrompt);
   const updateProject = useMutation(api.projects.update);
+  const queueState = useQuery(api.chat.listQueue, {
+    projectId: projectId as Id<"projects">,
+    ownerId,
+  });
 
   const loadedMessages = useMemo<ChatMessage[]>(() => {
     if (!convexMessages) return [];
@@ -222,7 +238,7 @@ export function ChatPanel({
     [ownerId, projectId, sendMessage]
   );
 
-    const onAddMessage = useCallback(async (message: Omit<ChatMessage, "id">, options?: { optimistic?: boolean }) => {
+  const onAddMessage = useCallback(async (message: Omit<ChatMessage, "id">, options?: { optimistic?: boolean }) => {
     // Add to local state immediately for responsiveness
     const pendingId = `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`;
     if (options?.optimistic) {
@@ -238,6 +254,46 @@ export function ChatPanel({
     // Persist to Convex
     await persistMessage(message, pendingId);
   }, [persistMessage]);
+
+  const enqueueUserPrompt = useCallback(
+    async (prompt: string) => {
+      const pendingId = `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`;
+      setPendingMessages((prev) => [
+        ...prev,
+        {
+          id: pendingId,
+          role: "user",
+          content: prompt,
+          pendingStatus: "sending",
+        },
+      ]);
+
+      try {
+        const result = await enqueuePrompt({
+          projectId: projectId as Id<"projects">,
+          ownerId,
+          prompt,
+        });
+        if (result?.messageId) {
+          setPendingMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === pendingId
+                ? { ...msg, id: result.messageId, pendingStatus: "sent" }
+                : msg
+            )
+          );
+        }
+      } catch (error) {
+        console.error("Failed to enqueue prompt:", error);
+        setPendingMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === pendingId ? { ...msg, pendingStatus: "failed" } : msg
+          )
+        );
+      }
+    },
+    [enqueuePrompt, ownerId, projectId]
+  );
 
   const onCodeUpdate = useCallback((code: string) => {
     onCodeChange(code);
@@ -429,11 +485,14 @@ export function ChatPanel({
       if (donePayload.code && donePayload.code !== currentCode) {
         onCodeUpdate(donePayload.code);
       }
+      return { ok: true as const };
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to generate code";
       await onAddMessage({
         role: "system",
-        content: `Error: ${error instanceof Error ? error.message : "Failed to generate code"}`,
+        content: `Error: ${message}`,
       });
+      return { ok: false as const, error: message };
     } finally {
       setStreamStatus("");
       setIsGenerating(false);
@@ -442,9 +501,77 @@ export function ChatPanel({
     }
   }, [currentCode, onAddMessage, onCodeUpdate, onPromptComplete]);
 
+  useEffect(() => {
+    if (!queueState) return;
+    if (queueWorkerActiveRef.current) return;
+
+    const hasWork = queueState.runningCount > 0 || queueState.queuedCount > 0;
+    if (!hasWork) return;
+
+    queueWorkerActiveRef.current = true;
+
+    void (async () => {
+      try {
+        while (true) {
+          const next = await claimNextPrompt({
+            projectId: projectId as Id<"projects">,
+            ownerId,
+            staleAfterMs: 15000,
+          });
+
+          if (!next) {
+            break;
+          }
+
+          let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+          try {
+            heartbeatTimer = setInterval(() => {
+              void heartbeatPrompt({
+                queueId: next.queueId,
+                projectId: projectId as Id<"projects">,
+                ownerId,
+              });
+            }, 5000);
+
+            const result = await generateResponse(next.prompt);
+            if (result.ok) {
+              await completePrompt({
+                queueId: next.queueId,
+                projectId: projectId as Id<"projects">,
+                ownerId,
+              });
+            } else {
+              await failPrompt({
+                queueId: next.queueId,
+                projectId: projectId as Id<"projects">,
+                ownerId,
+                error: result.error || "Unknown generation error",
+              });
+            }
+          } finally {
+            if (heartbeatTimer) {
+              clearInterval(heartbeatTimer);
+            }
+          }
+        }
+      } finally {
+        queueWorkerActiveRef.current = false;
+      }
+    })();
+  }, [
+    claimNextPrompt,
+    completePrompt,
+    failPrompt,
+    generateResponse,
+    heartbeatPrompt,
+    ownerId,
+    projectId,
+    queueState,
+  ]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isGenerating) return;
+    if (!input.trim()) return;
 
     const prompt = input.trim();
     setInput("");
@@ -454,14 +581,8 @@ export function ChatPanel({
       ? defaultProjectNames.has(projectName.trim().toLowerCase())
       : false;
 
-    // Add user message immediately for optimistic rendering.
-    void onAddMessage(
-      {
-        role: "user",
-        content: prompt,
-      },
-      { optimistic: true }
-    );
+    // Add user message immediately and queue it.
+    void enqueueUserPrompt(prompt);
 
     if (!hasUserMessages && canAutoName) {
       void (async () => {
@@ -489,20 +610,13 @@ export function ChatPanel({
       })();
     }
 
-    await generateResponse(prompt);
+    // Queue worker effect processes prompts sequentially.
   };
 
   const handleRetry = useCallback(async (prompt: string) => {
-    if (!prompt.trim() || isGenerating) return;
-    void onAddMessage(
-      {
-        role: "user",
-        content: prompt,
-      },
-      { optimistic: true }
-    );
-    await generateResponse(prompt);
-  }, [generateResponse, isGenerating, onAddMessage]);
+    if (!prompt.trim()) return;
+    await enqueueUserPrompt(prompt);
+  }, [enqueueUserPrompt]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -512,9 +626,14 @@ export function ChatPanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-card border-r border-border">
+    <div className="flex flex-col h-full bg-card">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+      <div
+        className={`flex items-center gap-2 px-4 py-3 border-b border-border ${headerDraggable ? "cursor-move" : ""}`}
+        draggable={headerDraggable}
+        onDragStart={onHeaderDragStart}
+        onDragEnd={onHeaderDragEnd}
+      >
         <MessageSquare className="w-4 h-4 text-indigo-500" />
         <h2 className="text-sm font-medium text-foreground">Chat</h2>
       </div>
@@ -522,20 +641,24 @@ export function ChatPanel({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {displayedMessages.map((msg, index) => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            retryPrompt={getRetryPrompt(displayedMessages, index)}
-            onRetry={handleRetry}
-            isGenerating={isGenerating}
-          />
-        ))}
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              retryPrompt={getRetryPrompt(displayedMessages, index)}
+              onRetry={handleRetry}
+            />
+          ))}
 
         {isGenerating && (
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 dark:border-emerald-900/60 dark:bg-emerald-950/20 p-3 space-y-2">
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300 text-sm">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>{streamStatus || "Running tools..."}</span>
+              <span>
+                {streamStatus || "Running tools..."}
+                {queueState && queueState.queuedCount > 0
+                  ? ` (${queueState.queuedCount} queued)`
+                  : ""}
+              </span>
             </div>
             {liveAssistantMessage && (
               <div className="rounded-md border border-emerald-500/20 bg-background/50 dark:border-emerald-900/40 dark:bg-zinc-950/40 p-2 text-sm text-emerald-800 dark:text-emerald-100/90 prose prose-sm dark:prose-invert max-w-none">
@@ -582,11 +705,10 @@ export function ChatPanel({
             placeholder="Describe what you want to build..."
             className="h-full w-full bg-background border border-input rounded-lg px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring"
             rows={3}
-            disabled={isGenerating}
           />
           <button
             type="submit"
-            disabled={!input.trim() || isGenerating}
+            disabled={!input.trim()}
             className="absolute right-2 bottom-2 p-2 rounded-md bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
           >
             {isGenerating ? (
@@ -605,12 +727,10 @@ function MessageBubble({
   message,
   retryPrompt,
   onRetry,
-  isGenerating,
 }: {
   message: DisplayMessage;
   retryPrompt?: string;
   onRetry?: (prompt: string) => void;
-  isGenerating?: boolean;
 }) {
   const roleConfig = {
     user: {
@@ -686,7 +806,6 @@ function MessageBubble({
         <div className="mt-2 flex justify-end">
           <button
             onClick={() => onRetry(retryPrompt)}
-            disabled={isGenerating}
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Retry this prompt"
             type="button"

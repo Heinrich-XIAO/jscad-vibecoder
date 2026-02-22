@@ -48,6 +48,28 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"]),
 
+  promptQueue: defineTable({
+    projectId: v.id("projects"),
+    ownerId: v.string(),
+    prompt: v.string(),
+    userMessageId: v.id("chatMessages"),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    attempts: v.number(),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    heartbeatAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_status_createdAt", ["projectId", "status", "createdAt"]),
+
   exports: defineTable({
     versionId: v.id("versions"),
     projectId: v.id("projects"),
