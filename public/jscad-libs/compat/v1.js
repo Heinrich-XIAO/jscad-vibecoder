@@ -54,16 +54,16 @@ const wrap = (geometry) => {
       return wrap(colors.colorize(color, this));
     },
     union(other) {
-      return wrap(booleans.union(this, other));
+      return wrap(booleansCompat.union(this, other));
     },
     subtract(other) {
-      return wrap(booleans.subtract(this, other));
+      return wrap(booleansCompat.subtract(this, other));
     },
     intersect(other) {
-      return wrap(booleans.intersect(this, other));
+      return wrap(booleansCompat.intersect(this, other));
     },
     unionForNonIntersecting(other) {
-      return wrap(booleans.union(this, other));
+      return wrap(booleansCompat.union(this, other));
     },
   });
 
@@ -132,11 +132,20 @@ const square = (options = {}) => {
 const flatten = (items) =>
   items.flat ? items.flat() : [].concat(...items);
 
-const union = (...geometries) => wrap(booleans.union(...flatten(geometries)));
+const normalizeBooleanArgs = (items) => flatten(items).filter(Boolean);
+
+const booleansCompat = {
+  ...booleans,
+  union: (...geometries) => booleans.union(...normalizeBooleanArgs(geometries)),
+  subtract: (base, ...cuts) => booleans.subtract(base, ...normalizeBooleanArgs(cuts)),
+  intersect: (...geometries) => booleans.intersect(...normalizeBooleanArgs(geometries)),
+};
+
+const union = (...geometries) => wrap(booleansCompat.union(...geometries));
 const difference = (base, ...cuts) =>
-  wrap(booleans.subtract(base, ...flatten(cuts)));
+  wrap(booleansCompat.subtract(base, ...cuts));
 const intersection = (...geometries) =>
-  wrap(booleans.intersect(...flatten(geometries)));
+  wrap(booleansCompat.intersect(...geometries));
 
 const linear_extrude = (options = {}, geometry) => {
   const height = options.height ?? options.h ?? 1;
@@ -257,7 +266,7 @@ const api = {
   rotate,
   scale,
   color,
-  booleans
+  booleans: booleansCompat
 };
 
 // Helper to unwrap geometries before serialization (removes wrapper methods)
