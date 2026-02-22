@@ -36,9 +36,9 @@ type DropZone = "left" | "right" | "top" | "bottom" | "center";
 const DEFAULT_PANE_ORDER: PaneId[] = ["chat", "code", "viewport"];
 
 const DEFAULT_PANE_RATIOS: Record<PaneId, number> = {
-  chat: 0.24,
-  code: 0.46,
-  viewport: 0.3,
+  chat: 0.2,
+  code: 0.34,
+  viewport: 0.46,
 };
 
 const MIN_PANE_WIDTH: Record<PaneId, number> = {
