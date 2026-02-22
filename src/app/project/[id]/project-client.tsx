@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
-import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Undo2, Redo2, Box, Camera } from "lucide-react";
+import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Undo2, Redo2, Box, Camera, RotateCcw } from "lucide-react";
 import { ChatPanel, type ChatPanelHandle } from "@/components/chat-panel";
 import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
 import { Viewport3D, type Viewport3DHandle } from "@/components/viewport-3d";
@@ -443,6 +443,15 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       setIsSnapshotting(false);
     }
   }, [geometryCount, showChat]);
+
+  const handleResetLayout = useCallback(() => {
+    setPaneOrder(DEFAULT_PANE_ORDER);
+    setPaneRatios(DEFAULT_PANE_RATIOS);
+    setLayoutMode("columns");
+    setStackPrimaryRatio(0.58);
+    setStackSecondaryRatio(0.5);
+    setActivePane("code");
+  }, []);
 
   useEffect(() => {
     if (!visiblePaneIds.includes(activePane) && visiblePaneIds.length > 0) {
@@ -1124,6 +1133,13 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             title="Toggle Chat (Ctrl+/)"
           >
             <MessageSquare className="w-5 h-5" />
+          </button>
+          <button
+            onClick={handleResetLayout}
+            className="p-2 rounded-lg transition-colors hover:bg-secondary"
+            title="Reset Pane Layout"
+          >
+            <RotateCcw className="w-5 h-5" />
           </button>
           <div className="w-px h-6 bg-border mx-1" />
           <button

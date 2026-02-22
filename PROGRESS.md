@@ -33,6 +33,7 @@
 - Fixed codegen prompt handling to convert markdown image attachments into true multimodal `image_url` message parts for OpenRouter models.
 - Chat input now has a dedicated image-attachment strip with removable thumbnail previews; queued prompts persist image attachments separately and send them as multimodal inputs.
 - Improved project page pane resizing on constrained viewports by scaling minimum split constraints when panes cannot all satisfy hard mins, preventing stuck chat resize behavior and unintended adjacent pane collapse.
+- Added a reset-layout control on the project page toolbar to restore default pane order/sizes after aggressive dragging/resizing.
 - Updated 3-pane drag/drop stacking behavior for vertical drops:
   - dropping one pane above/below another now prefers a side stack layout over collapsing into 3 horizontal rows
   - when dropping viewport onto code (top/bottom), chat stays as the single pane on the opposite side and code+viewport stack vertically
