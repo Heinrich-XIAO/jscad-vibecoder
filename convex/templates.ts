@@ -40,9 +40,6 @@ export const create = mutation({
 export const seed = mutation({
   args: {},
   handler: async (ctx) => {
-    const existing = await ctx.db.query("templates").first();
-    if (existing) return; // Already seeded
-
     const templates = [
       {
         name: "Basic Box",
@@ -138,8 +135,21 @@ module.exports = { main, getParameterDefinitions }`,
       },
     ];
 
+    const existingTemplates = await ctx.db.query("templates").collect();
+    const existingByName = new Map(existingTemplates.map((template) => [template.name, template]));
+
     for (const t of templates) {
-      await ctx.db.insert("templates", t);
+      const existingTemplate = existingByName.get(t.name);
+      if (existingTemplate) {
+        await ctx.db.patch(existingTemplate._id, {
+          description: t.description,
+          category: t.category,
+          jscadCode: t.jscadCode,
+          parameterSchema: t.parameterSchema,
+        });
+      } else {
+        await ctx.db.insert("templates", t);
+      }
     }
   },
 });

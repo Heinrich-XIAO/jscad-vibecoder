@@ -154,3 +154,29 @@ export const remove = mutation({
     await ctx.db.delete(args.id);
   },
 });
+
+export const migrateStarterCodeToArrayMain = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const versions = await ctx.db.query("versions").collect();
+    let updated = 0;
+
+    for (const version of versions) {
+      if (!version.jscadCode.includes("return cuboid({ size: [20, 20, 20] })")) {
+        continue;
+      }
+
+      const nextCode = version.jscadCode.replace(
+        "return cuboid({ size: [20, 20, 20] })",
+        "return [cuboid({ size: [20, 20, 20] })]"
+      );
+
+      if (nextCode !== version.jscadCode) {
+        await ctx.db.patch(version._id, { jscadCode: nextCode });
+        updated += 1;
+      }
+    }
+
+    return { updated };
+  },
+});
