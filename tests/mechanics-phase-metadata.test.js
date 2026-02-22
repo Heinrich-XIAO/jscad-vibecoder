@@ -46,7 +46,7 @@ test("gear metadata exposes phase and pitch information", () => {
 test("rack metadata exposes effective length and phase origin", () => {
   loadMechanicsLibraries();
 
-  const rack = globalThis.window.jscad.tspi.rack({}, 100, 8, 1, 20, 20, 0, 2);
+  const rack = globalThis.window.jscad.tspi.rack({}, 0, 8, 1, 20, 20, 0, 2);
   const pitch = rack.getPitchFeatures();
   const phase = rack.getPhaseMetadata();
 
@@ -55,4 +55,12 @@ test("rack metadata exposes effective length and phase origin", () => {
   expect(phase.effectiveTeethNumber).toBeGreaterThan(0);
   expect(phase.effectiveLength).toBeGreaterThan(0);
   expect(Array.isArray(phase.phaseOrigin)).toBe(true);
+});
+
+test("rack rejects length values that are not circular-pitch multiples", () => {
+  loadMechanicsLibraries();
+
+  expect(() =>
+    globalThis.window.jscad.tspi.rack({}, 100, 8, 1, 20, 20, 0, 2)
+  ).toThrow(/exact multiple of circular pitch/i);
 });

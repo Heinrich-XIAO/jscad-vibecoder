@@ -80,7 +80,13 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 	var inputTeethNumber = this.parameters['teethNumber'];
 
 	if(inputLength > 0) {
-		this.teethNumber = Math.max(1, Math.round(inputLength / this.circularPitch));
+		var teethFromLength = inputLength / this.circularPitch;
+		var roundedTeeth = Math.round(teethFromLength);
+		var tolerance = 1e-9;
+		if(Math.abs(teethFromLength - roundedTeeth) > tolerance) {
+			throw new Error('Invalid rack length: length must be an exact multiple of circular pitch (module * PI). Use teethNumber for automatic sizing.');
+		}
+		this.teethNumber = Math.max(1, roundedTeeth);
 		this.length = this.teethNumber * this.circularPitch;
 	} else {
 		this.teethNumber = inputTeethNumber > 0 ? Math.round(inputTeethNumber) : 20;

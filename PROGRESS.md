@@ -1,6 +1,10 @@
 # Project Progress
 
 ## Completed
+- Rack helper now throws for invalid explicit length/module combinations:
+  - positive `length` must be an exact multiple of `module * PI`
+  - removed silent rounding to nearest tooth count for explicit lengths
+  - added regression test for invalid-length rejection
 - Added server-side guardrails to prevent assistant from dumping full JSCAD code in chat responses:
   - detects code-like assistant output (fenced blocks/JSCAD patterns)
   - forces retry with strict plain-language-only system instruction

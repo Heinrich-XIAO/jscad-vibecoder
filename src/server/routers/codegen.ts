@@ -1347,8 +1347,9 @@ For mechanisms, always model motion around one normalized input variable:
 - Racks: use the new library instead of constructing a straight rack from scratch.
   - include('/jscad-libs/mechanics/racks.jscad') (loads v1 compat automatically).
   - Prefer window.jscad.tspi.rack(printerSettings, length, thickness, module, teethNumber, pressureAngle, clearance, backHeight) to control overall length and tooth count.
-  - Defaults: length = 100mm (when length is supplied), thickness = 8mm, module = 1mm, teethNumber = 20, pressureAngle = 20deg, clearance = 0mm, backHeight = 2mm.
-  - Supplying a positive length lets the helper compute a matching tooth count; omit length to fix the count via teethNumber.
+  - Defaults: thickness = 8mm, module = 1mm, teethNumber = 20, pressureAngle = 20deg, clearance = 0mm, backHeight = 2mm.
+  - If length is positive, it MUST be an exact multiple of circular pitch (module * PI), otherwise the rack helper throws an error.
+  - Prefer omitting/zeroing length and controlling size with teethNumber unless you intentionally provide an exact pitch-multiple length.
   - ALWAYS wrap the return value with unwrap(), then return an array: return [unwrap(rack.getModel())].
 
 Good write_code output (gear library):
@@ -1384,7 +1385,7 @@ Good write_code output (rack library):
 include('/jscad-libs/mechanics/racks.jscad')
 function getParameterDefinitions() {
   return [
-    { name: 'length', type: 'float', initial: 100, caption: 'Rack length' },
+    { name: 'length', type: 'float', initial: 0, caption: 'Rack length (0 = use teeth)' },
     { name: 'thickness', type: 'float', initial: 8, caption: 'Thickness' },
     { name: 'module', type: 'float', initial: 1, caption: 'Module' },
     { name: 'teethNumber', type: 'int', initial: 20, caption: 'Teeth count' },
@@ -1394,7 +1395,7 @@ function getParameterDefinitions() {
   ]
 }
 function main(params) {
-  const { length = 100, thickness = 8, module = 1, teethNumber = 20, pressureAngle = 20, clearance = 0, backHeight = 2 } = params || {}
+  const { length = 0, thickness = 8, module = 1, teethNumber = 20, pressureAngle = 20, clearance = 0, backHeight = 2 } = params || {}
   const printerSettings = {
     scale: 1,
     correctionInsideDiameter: 0,
