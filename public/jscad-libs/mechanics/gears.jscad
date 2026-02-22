@@ -150,9 +150,10 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 	this.outsideRadius				= this.outsideDiameter / 2.0;
 	this.rootDiameter				= this.pitchDiameter - 2*this.dedendum;
 	this.rootRadius					= this.rootDiameter / 2.0;
-	this.initialPhaseOffsetDegrees	= 0;
-	this.initialPhaseOffsetRadians	= 0;
-	this.initialTangentialOffsetAtPitch	= 0;
+	this.toothAngularThicknessAtPitch = this.circularToothThickness / this.pitchRadius;
+	this.initialPhaseOffsetRadians	= -this.toothAngularThicknessAtPitch / 2.0;
+	this.initialPhaseOffsetDegrees	= this.initialPhaseOffsetRadians * 180 / Math.PI;
+	this.initialTangentialOffsetAtPitch	= this.pitchRadius * this.initialPhaseOffsetRadians;
 
 	this.getPitchFeatures = function() {
 		return {
@@ -190,10 +191,10 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 			initialToothPhaseOffsetDegrees: this.initialPhaseOffsetDegrees,
 			initialToothPhaseOffsetRadians: this.initialPhaseOffsetRadians,
 			initialTangentialOffsetAtPitch: this.initialTangentialOffsetAtPitch,
-			recommendedRackShiftAtStart: 0,
+			recommendedRackShiftAtStart: this.circularToothThickness / 2.0,
 			recommendedRackShiftAtStartUnits: 'mm',
-			recommendedRackShiftAtStartPitchFraction: 0,
-			description: 'Gear output now starts with zero phase offset; racks align without additional shift at progress=0.'
+			recommendedRackShiftAtStartPitchFraction: (this.circularToothThickness / 2.0) / this.circularPitch,
+			description: 'Gear output rotates by half the tooth thickness (solid portion only), so racks usually need +half-tooth shift at progress=0.'
 		};
 	};
 	

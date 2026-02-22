@@ -28,7 +28,7 @@
   - apply recommended phase correction
   - rerun until no phase misalignment remains
 - Added tests for metadata exposure and animation diagnostic tool wiring.
-- Gear library now defaults to zero initial phase offset for straight alignment.
+- Gear library now aligns the initial phase to half the tooth thickness (no gap), matching rack-centered expectations.
 
 ## Notes
 - Metadata changes are additive and do not change existing `getModel()` behavior.
