@@ -1,6 +1,10 @@
 # Project Progress
 
 ## Completed
+- Added server-side guardrails to prevent assistant from dumping full JSCAD code in chat responses:
+  - detects code-like assistant output (fenced blocks/JSCAD patterns)
+  - forces retry with strict plain-language-only system instruction
+  - reinforces final-response prompt to avoid code blocks
 - Added mechanism phase metadata accessors to gear and rack libraries:
   - `getPitchFeatures()`
   - `getKinematicDefaults()`

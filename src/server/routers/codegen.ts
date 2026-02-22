@@ -59,6 +59,16 @@ function parseModelSpec(model: string) {
   return { model: baseModel, reasoning: { effort } } as const;
 }
 
+function containsCodeLikeContent(content?: string) {
+  if (!content) return false;
+  return (
+    /```[\s\S]*?```/.test(content) ||
+    /module\.exports\s*=/.test(content) ||
+    /function\s+main\s*\(/.test(content) ||
+    /require\(['"]@jscad\/modeling['"]\)/.test(content)
+  );
+}
+
 interface ToolCallRecord {
   toolName: string;
   args: Record<string, unknown>;
@@ -158,6 +168,8 @@ export async function runCodegen(
     messages.push(assistantMessage);
 
     if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+      const assistantContent = assistantMessage.content ?? "";
+
       if (pendingRuntimeError || pendingDiagnosticsErrors > 0) {
         messages.push({
           role: "system",
@@ -167,8 +179,17 @@ export async function runCodegen(
         continue;
       }
 
-      if (assistantMessage.content) {
-        await onEvent?.({ type: "assistant_message", content: assistantMessage.content });
+      if (containsCodeLikeContent(assistantContent)) {
+        messages.push({
+          role: "system",
+          content:
+            "Do not paste full code in assistant messages. If the user requested code creation or edits, call write_code/edit_code tools and provide only a concise status summary in text.",
+        });
+        continue;
+      }
+
+      if (assistantContent) {
+        await onEvent?.({ type: "assistant_message", content: assistantContent });
       }
       break;
     }
@@ -344,12 +365,12 @@ export async function runCodegen(
   if (!finalAssistantContent) {
     const streamed = await streamFinalAssistant([
       ...messages,
-      {
-        role: "system",
-        content:
-          "Provide a final response to the user. Do not call tools. Summarize what you did and what happened.",
-      },
-    ]);
+        {
+          role: "system",
+          content:
+            "Provide a final response to the user. Do not call tools. Summarize what you did and what happened. Do not include full code or code blocks.",
+        },
+      ]);
     if (streamed) {
       finalAssistantContent = streamed;
       messages.push({ role: "assistant", content: streamed });
@@ -374,6 +395,21 @@ export async function runCodegen(
   if (!finalAssistantContent) {
     finalAssistantContent = "Ready when you are. What should I do next?";
     await onEvent?.({ type: "assistant_message", content: finalAssistantContent });
+  }
+
+  if (containsCodeLikeContent(finalAssistantContent)) {
+    const streamed = await streamFinalAssistant([
+      ...messages,
+      {
+        role: "system",
+        content:
+          "Your previous response included code. Respond again without any code blocks or full source. Only provide a concise plain-language status update.",
+      },
+    ]);
+    if (streamed) {
+      finalAssistantContent = streamed;
+      messages.push({ role: "assistant", content: streamed });
+    }
   }
 
   payload.assistantMessage = finalAssistantContent;
