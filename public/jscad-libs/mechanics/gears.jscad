@@ -141,6 +141,7 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 	this.pitchDiameter				= this.teethNumber * this.module;
 	this.pitchRadius				= this.pitchDiameter / 2.0;
 	this.circularToothThickness		= this.circularPitch / 2.0;
+	this.circularToothSpacing		= this.circularPitch;
 	this.baseCircleDiameter			= this.pitchDiameter * Math.cos(this.pressureAngle * Math.PI/180.0);
 	this.baseCircleRadius			= this.baseCircleDiameter / 2.0;
 	this.addendum					= this.module;
@@ -149,6 +150,52 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 	this.outsideRadius				= this.outsideDiameter / 2.0;
 	this.rootDiameter				= this.pitchDiameter - 2*this.dedendum;
 	this.rootRadius					= this.rootDiameter / 2.0;
+	this.initialPhaseOffsetDegrees	= -360 / (4 * this.teethNumber);
+	this.initialPhaseOffsetRadians	= this.initialPhaseOffsetDegrees * Math.PI / 180;
+	this.initialTangentialOffsetAtPitch	= this.pitchRadius * this.initialPhaseOffsetRadians;
+
+	this.getPitchFeatures = function() {
+		return {
+			type: 'pitch_circle',
+			pitchCircle: {
+				center: [0, 0, 0],
+				radius: this.pitchRadius,
+				diameter: this.pitchDiameter,
+				axis: [0, 0, 1]
+			},
+			module: this.module,
+			teethNumber: this.teethNumber,
+			pressureAngle: this.pressureAngle,
+			circularPitch: this.circularPitch,
+			circularToothThickness: this.circularToothThickness,
+			source: 'metadata'
+		};
+	};
+
+	this.getKinematicDefaults = function() {
+		return {
+			progressName: 'progress',
+			progressRange: [0, 1],
+			rotationAxis: [0, 0, 1],
+			rotationDegreesPerProgress: 360,
+			translationAtPitchPerFullTurn: this.teethNumber * this.circularPitch,
+			module: this.module,
+			teethNumber: this.teethNumber
+		};
+	};
+
+	this.getPhaseMetadata = function() {
+		return {
+			kind: 'gear_phase',
+			initialToothPhaseOffsetDegrees: this.initialPhaseOffsetDegrees,
+			initialToothPhaseOffsetRadians: this.initialPhaseOffsetRadians,
+			initialTangentialOffsetAtPitch: this.initialTangentialOffsetAtPitch,
+			recommendedRackShiftAtStart: this.circularPitch / 4.0,
+			recommendedRackShiftAtStartUnits: 'mm',
+			recommendedRackShiftAtStartPitchFraction: 0.25,
+			description: 'Gear output is rotated by -360/(4*teeth) so rack-centered animations usually need +circularPitch/4 shift at progress=0.'
+		};
+	};
 	
 	this.getModel = function() {
 		var maxTangentLength = Math.sqrt(this.outsideRadius*this.outsideRadius - this.baseCircleRadius*this.baseCircleRadius);
@@ -201,7 +248,7 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 			);
 			this.thickness = this.thickness*2;
 		}
-		return result.rotateZ(-360 / (4 * this.teethNumber));
+		return result.rotateZ(this.initialPhaseOffsetDegrees);
 	};
 }
 

@@ -981,6 +981,82 @@ function buildToolDefinitions() {
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "check_animation_intersections",
+        description:
+          "Diagnose meshing/intersection and phase errors across animation progress for mechanisms (currently gear-rack). Returns residuals and recommended phase shift.",
+        parameters: {
+          type: "object",
+          properties: {
+            mechanismType: {
+              type: "string",
+              enum: ["gear_rack"],
+              description: "Mechanism type to analyze.",
+            },
+            module: {
+              type: "number",
+              description: "Gear/rack module in mm.",
+            },
+            pinionTeeth: {
+              type: "number",
+              description: "Pinion tooth count.",
+            },
+            pinionRotationDegPerProgress: {
+              type: "number",
+              description: "Pinion rotation slope in deg per progress unit (e.g. 360 or -360).",
+            },
+            rackTranslationMmPerProgress: {
+              type: "number",
+              description: "Rack translation slope in mm per progress unit, matching your code sign convention.",
+            },
+            rackXAtProgress0: {
+              type: "number",
+              description: "Rack X position at progress=0 in mm.",
+            },
+            userPhaseShiftMm: {
+              type: "number",
+              description: "Any explicit phase shift term already applied in code (mm).",
+            },
+            centeredStart: {
+              type: "boolean",
+              description: "Whether animation intent is centered mesh at progress=0.",
+            },
+            useLibraryPhaseCompensation: {
+              type: "boolean",
+              description: "Use +circularPitch/4 default compensation for bundled gear library phase offset.",
+            },
+            gearCenterAxisPosition: {
+              type: "number",
+              description: "Gear center coordinate along pitch axis (e.g. y value for pitchAxis='y').",
+            },
+            rackPitchAxisPosition: {
+              type: "number",
+              description: "Rack pitch-line coordinate along pitch axis (usually 0).",
+            },
+            meshGap: {
+              type: "number",
+              description: "Expected radial clearance gap in mm (default 0).",
+            },
+            pitchAxis: {
+              type: "string",
+              enum: ["x", "y"],
+              description: "Pitch alignment axis used in placement.",
+            },
+            samples: {
+              type: "number",
+              description: "Number of progress samples (default 41).",
+            },
+            tolerance: {
+              type: "number",
+              description: "Residual tolerance in mm for pass/fail (default 0.02).",
+            },
+          },
+          required: ["module", "pinionTeeth", "pinionRotationDegPerProgress", "rackTranslationMmPerProgress"],
+        },
+      },
+    },
   ];
 }
 
@@ -1113,6 +1189,7 @@ module.exports = { main, getParameterDefinitions }
 10. Use calculate for math calculations (e.g., computing coordinates, dimensions, angles)
 11. Use position_relative for placing geometries relative to each other - PREFER this over manual translate() calculations
 12. Use check_alignment to verify proper gear/rack meshing before finalizing code
+13. Use check_animation_intersections to diagnose gear/rack phase drift and intersection risk across progress
 
 ## Relative Positioning (IMPORTANT - Use Tools, Not Manual Calculations)
 
@@ -1194,9 +1271,12 @@ measure_geometry(geometry="rack", rackParams={ module: 1 })
 For mechanisms, always model motion around one normalized input variable:
 - Define one primary motion parameter: \`progress\` in [0, 1].
 - Express all part motion as functions of \`progress\` (avoid unsynchronized independent motion sliders).
+- The primary mechanism control should always exist in \`getParameterDefinitions()\` with the exact name \`progress\`.
+- For diagnostics, additional temporary params may be added, but \`progress\` remains the canonical motion input.
 - Prefer pitch-feature metadata from supported libraries (gear/rack helpers) when available.
 - If metadata is missing, use autodetection via measurements/known params, and state assumptions when confidence is low.
 - For meshing parts (gears/racks), use position_relative + check_alignment and avoid manual translate math.
+- For animated meshing diagnostics, use check_animation_intersections to compute residuals and recommended phase shifts.
 - Target behavior: infer relationships from pitch features, solve a feasible shared ROM, then animate only within that solved range.
 
 ## External Libraries
@@ -1418,10 +1498,12 @@ function executeToolCall(
 
       const gearParams = args.gearParams as { module?: number; teeth?: number } | undefined;
       const rackParams = args.rackParams as { module?: number } | undefined;
+      const features: Array<Record<string, unknown>> = [];
 
       if (gearParams && gearParams.module && gearParams.teeth) {
         const pitchDiameter = gearParams.module * gearParams.teeth;
         const pitchRadius = pitchDiameter / 2;
+        const circularPitch = gearParams.module * Math.PI;
         output.pitchCircle = {
           module: gearParams.module,
           teeth: gearParams.teeth,
@@ -1429,13 +1511,45 @@ function executeToolCall(
           pitchRadius,
           description: `Pitch circle: diameter = module * teeth = ${gearParams.module} * ${gearParams.teeth} = ${pitchDiameter}mm. Use this for gear meshing alignment.`,
         };
+        output.phaseMetadata = {
+          gearLibraryInitialToothPhaseOffsetDegrees: -360 / (4 * gearParams.teeth),
+          recommendedRackShiftAtStartMm: circularPitch / 4,
+          recommendedRackShiftAtStartPitchFraction: 0.25,
+          description:
+            "Bundled gear helper applies quarter-tooth initial phase shift. Rack-centered animations usually need +circularPitch/4 at progress=0.",
+        };
+        features.push({
+          type: "pitch_circle",
+          source: "params",
+          module: gearParams.module,
+          teethNumber: gearParams.teeth,
+          radius: pitchRadius,
+          diameter: pitchDiameter,
+          circularPitch,
+        });
       }
 
       if (rackParams && rackParams.module) {
+        const circularPitch = rackParams.module * Math.PI;
         output.pitchLine = {
           module: rackParams.module,
           description: `Rack pitch line at module height from tooth base. The pitch line is where the gear pitch circle rolls. Use for gear-rack meshing alignment.`,
         };
+        features.push({
+          type: "pitch_line",
+          source: "params",
+          module: rackParams.module,
+          point: [0, 0, 0],
+          direction: [1, 0, 0],
+          normal: [0, 1, 0],
+          circularPitch,
+        });
+      }
+
+      if (features.length > 0) {
+        output.features = features;
+        output.featureSource = "params";
+        output.featureConfidence = "medium";
       }
 
       return { output };
@@ -1750,7 +1864,7 @@ function executeToolCall(
           };
         }
 
-        output.suggestion = "Use position_relative tool with 'pitch_aligned' to generate correct positioning code.";
+        output.suggestion = "Use position_relative tool with 'pitch_aligned' to generate correct positioning code, then run check_animation_intersections for animated phase diagnostics.";
       } else if (checkType === "overlap") {
         output.suggestion = "Check that bounding boxes of both geometries intersect. Use measure_geometry to get bounds, then verify overlap.";
       } else if (checkType === "touching") {
@@ -1758,6 +1872,161 @@ function executeToolCall(
       }
 
       return { output };
+    }
+
+    case "check_animation_intersections": {
+      const mechanismType = (args.mechanismType as string | undefined) ?? "gear_rack";
+      if (mechanismType !== "gear_rack") {
+        return {
+          output: {
+            success: false,
+            error: `Unsupported mechanismType: ${mechanismType}`,
+            supportedMechanismTypes: ["gear_rack"],
+          },
+        };
+      }
+
+      const moduleValue = Number(args.module);
+      const pinionTeeth = Number(args.pinionTeeth);
+      const pinionRotationDegPerProgress = Number(args.pinionRotationDegPerProgress);
+      const rackTranslationMmPerProgress = Number(args.rackTranslationMmPerProgress);
+      const rackXAtProgress0 = Number((args.rackXAtProgress0 as number | undefined) ?? 0);
+      const userPhaseShiftMm = Number((args.userPhaseShiftMm as number | undefined) ?? 0);
+      const centeredStart = (args.centeredStart as boolean | undefined) ?? true;
+      const useLibraryPhaseCompensation =
+        (args.useLibraryPhaseCompensation as boolean | undefined) ?? true;
+      const gearCenterAxisPosition = Number((args.gearCenterAxisPosition as number | undefined) ?? 0);
+      const rackPitchAxisPosition = Number((args.rackPitchAxisPosition as number | undefined) ?? 0);
+      const meshGap = Number((args.meshGap as number | undefined) ?? 0);
+      const pitchAxis = ((args.pitchAxis as string | undefined) ?? "y") === "x" ? "x" : "y";
+      const samplesRaw = Number((args.samples as number | undefined) ?? 41);
+      const samples = Number.isFinite(samplesRaw) ? Math.max(3, Math.min(501, Math.floor(samplesRaw))) : 41;
+      const tolerance = Number((args.tolerance as number | undefined) ?? 0.02);
+
+      if (!Number.isFinite(moduleValue) || moduleValue <= 0) {
+        return { output: { success: false, error: "module must be a positive number." } };
+      }
+      if (!Number.isFinite(pinionTeeth) || pinionTeeth <= 0) {
+        return { output: { success: false, error: "pinionTeeth must be a positive number." } };
+      }
+      if (!Number.isFinite(pinionRotationDegPerProgress)) {
+        return {
+          output: {
+            success: false,
+            error: "pinionRotationDegPerProgress must be a finite number.",
+          },
+        };
+      }
+      if (!Number.isFinite(rackTranslationMmPerProgress)) {
+        return {
+          output: {
+            success: false,
+            error: "rackTranslationMmPerProgress must be a finite number.",
+          },
+        };
+      }
+
+      const circularPitch = Math.PI * moduleValue;
+      const pitchCircumference = circularPitch * pinionTeeth;
+      const pitchRadius = (moduleValue * pinionTeeth) / 2;
+
+      const expectedTranslationMmPerProgress =
+        (pinionRotationDegPerProgress / 360) * pitchCircumference;
+      const translationResidual =
+        rackTranslationMmPerProgress - expectedTranslationMmPerProgress;
+
+      const expectedLibraryPhaseShiftMm = useLibraryPhaseCompensation
+        ? circularPitch / 4
+        : 0;
+      const expectedRackXAtProgress0 = centeredStart
+        ? expectedLibraryPhaseShiftMm + userPhaseShiftMm
+        : userPhaseShiftMm;
+      const phaseResidualAtStart = rackXAtProgress0 - expectedRackXAtProgress0;
+
+      const actualCenterDistance = Math.abs(
+        gearCenterAxisPosition - rackPitchAxisPosition
+      );
+      const expectedCenterDistance = pitchRadius + meshGap;
+      const radialResidual = actualCenterDistance - expectedCenterDistance;
+
+      let maxAbsPhaseResidual = -1;
+      let worstProgress = 0;
+      let worstResidual = 0;
+      for (let i = 0; i < samples; i++) {
+        const progress = samples === 1 ? 0 : i / (samples - 1);
+        const observedRackX = rackXAtProgress0 + rackTranslationMmPerProgress * progress;
+        const expectedRackX = expectedRackXAtProgress0 + expectedTranslationMmPerProgress * progress;
+        const residual = observedRackX - expectedRackX;
+        const absResidual = Math.abs(residual);
+        if (absResidual > maxAbsPhaseResidual) {
+          maxAbsPhaseResidual = absResidual;
+          worstProgress = progress;
+          worstResidual = residual;
+        }
+      }
+
+      const recommendedAdditionalPhaseShiftMm = -phaseResidualAtStart;
+      const recommendedAbsolutePhaseShiftMm =
+        userPhaseShiftMm + recommendedAdditionalPhaseShiftMm;
+
+      const hasRadialIntersectionRisk = radialResidual < -Math.abs(tolerance);
+      const hasKinematicDrift = Math.abs(translationResidual) > Math.abs(tolerance);
+      const hasPhaseMisalignment = maxAbsPhaseResidual > Math.abs(tolerance);
+
+      return {
+        output: {
+          success: true,
+          mechanismType,
+          pitchAxis,
+          pitchModel: {
+            module: moduleValue,
+            pinionTeeth,
+            circularPitch,
+            pitchCircumference,
+            pitchRadius,
+          },
+          radialCheck: {
+            gearCenterAxisPosition,
+            rackPitchAxisPosition,
+            expectedCenterDistance,
+            actualCenterDistance,
+            residual: radialResidual,
+            intersectionRisk: hasRadialIntersectionRisk,
+          },
+          kinematicCheck: {
+            pinionRotationDegPerProgress,
+            rackTranslationMmPerProgress,
+            expectedTranslationMmPerProgress,
+            translationResidual,
+            samples,
+            maxAbsPhaseResidual,
+            worstProgress,
+            worstResidual,
+          },
+          phase: {
+            centeredStart,
+            useLibraryPhaseCompensation,
+            expectedLibraryPhaseShiftMm,
+            rackXAtProgress0,
+            userPhaseShiftMm,
+            expectedRackXAtProgress0,
+            phaseResidualAtStart,
+            recommendedAdditionalPhaseShiftMm,
+            recommendedAbsolutePhaseShiftMm,
+            recommendedAbsolutePhaseShiftPitchFraction:
+              recommendedAbsolutePhaseShiftMm / circularPitch,
+          },
+          pass: !hasRadialIntersectionRisk && !hasKinematicDrift && !hasPhaseMisalignment,
+          tolerance,
+          diagnostics: {
+            hasRadialIntersectionRisk,
+            hasKinematicDrift,
+            hasPhaseMisalignment,
+          },
+          usageNote:
+            "Use recommendedAbsolutePhaseShiftMm as your phase offset term, then keep rack/gear driven by one normalized progress parameter.",
+        },
+      };
     }
 
     default:

@@ -89,6 +89,51 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 
 	this.addendum = this.module;
 	this.dedendum = this.addendum + this.clearance;
+	this.pitchLineY = 0;
+	this.phaseOriginX = -this.length / 2.0;
+
+	this.getPitchFeatures = function() {
+		return {
+			type: 'pitch_line',
+			pitchLine: {
+				point: [0, this.pitchLineY, 0],
+				direction: [1, 0, 0],
+				normal: [0, 1, 0]
+			},
+			module: this.module,
+			pressureAngle: this.pressureAngle,
+			circularPitch: this.circularPitch,
+			teethNumber: this.teethNumber,
+			length: this.length,
+			source: 'metadata'
+		};
+	};
+
+	this.getKinematicDefaults = function() {
+		return {
+			progressName: 'progress',
+			progressRange: [0, 1],
+			travelAxis: [1, 0, 0],
+			travelPerProgress: this.length,
+			module: this.module,
+			teethNumber: this.teethNumber,
+			length: this.length
+		};
+	};
+
+	this.getPhaseMetadata = function() {
+		return {
+			kind: 'rack_phase',
+			phaseOrigin: [this.phaseOriginX, this.pitchLineY, 0],
+			phaseAxis: [1, 0, 0],
+			pitchLineY: this.pitchLineY,
+			circularPitch: this.circularPitch,
+			effectiveLength: this.length,
+			effectiveTeethNumber: this.teethNumber,
+			referenceToothCenterAtStart: this.phaseOriginX + this.circularPitch / 2,
+			description: 'Rack pitch-line phase origin is the left edge at x=-length/2. Tooth centers are offset by half circular pitch.'
+		};
+	};
 
 	this.getModel = function() {
 		var pitch = this.circularPitch;
