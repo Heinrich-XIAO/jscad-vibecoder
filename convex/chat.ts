@@ -57,21 +57,34 @@ export const enqueuePrompt = mutation({
     projectId: v.id("projects"),
     ownerId: v.string(),
     prompt: v.string(),
+    promptImages: v.optional(
+      v.array(
+        v.object({
+          url: v.string(),
+          altText: v.optional(v.string()),
+        })
+      )
+    ),
   },
   handler: async (ctx, args) => {
     await ensureProjectOwner(ctx, args.projectId, args.ownerId);
+
+    const imageSummary = args.promptImages?.length
+      ? `\n\n[${args.promptImages.length} image attachment${args.promptImages.length === 1 ? "" : "s"}]`
+      : "";
 
     const now = Date.now();
     const userMessageId = await ctx.db.insert("chatMessages", {
       projectId: args.projectId,
       role: "user",
-      content: args.prompt,
+      content: `${args.prompt}${imageSummary}`,
     });
 
     const queueId = await ctx.db.insert("promptQueue", {
       projectId: args.projectId,
       ownerId: args.ownerId,
       prompt: args.prompt,
+      promptImages: args.promptImages,
       userMessageId,
       status: "queued",
       attempts: 0,
@@ -178,6 +191,7 @@ export const claimNextPrompt = mutation({
     return {
       queueId: next._id,
       prompt: next.prompt,
+      promptImages: next.promptImages ?? [],
     };
   },
 });

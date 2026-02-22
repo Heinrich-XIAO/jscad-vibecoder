@@ -31,6 +31,7 @@
 - Gear library now aligns the initial phase to half the tooth thickness (no gap), matching rack-centered expectations.
 - Added a viewport snapshot button that captures the current 3D view and injects the image into the chat prompt for richer context.
 - Fixed codegen prompt handling to convert markdown image attachments into true multimodal `image_url` message parts for OpenRouter models.
+- Chat input now has a dedicated image-attachment strip with removable thumbnail previews; queued prompts persist image attachments separately and send them as multimodal inputs.
 
 ## Notes
 - Metadata changes are additive and do not change existing `getModel()` behavior.

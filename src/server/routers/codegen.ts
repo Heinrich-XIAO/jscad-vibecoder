@@ -6,6 +6,14 @@ import { getOpenRouterEndpoint } from "@/lib/openrouter";
 
 export const generateInputSchema = z.object({
   prompt: z.string(),
+  promptImages: z
+    .array(
+      z.object({
+        url: z.string(),
+        altText: z.string().optional(),
+      })
+    )
+    .optional(),
   currentCode: z.string().optional(),
   projectContext: z
     .object({
@@ -55,7 +63,10 @@ type OpenRouterContentPart =
 const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
 const MAX_INLINE_PROMPT_IMAGES = 4;
 
-function buildUserPromptContent(prompt: string): string | OpenRouterContentPart[] {
+function buildUserPromptContent(
+  prompt: string,
+  promptImages?: Array<{ url: string; altText?: string }>
+): string | OpenRouterContentPart[] {
   const parts: OpenRouterContentPart[] = [];
   let lastIndex = 0;
   let imageCount = 0;
@@ -93,6 +104,22 @@ function buildUserPromptContent(prompt: string): string | OpenRouterContentPart[
   const remainder = prompt.slice(lastIndex);
   if (remainder.trim()) {
     parts.push({ type: "text", text: remainder });
+  }
+
+  const availableImageSlots = Math.max(0, MAX_INLINE_PROMPT_IMAGES - imageCount);
+  const normalizedPromptImages = (promptImages ?? [])
+    .map((image) => ({
+      url: image.url.trim(),
+      altText: image.altText?.trim() || "Attached image",
+    }))
+    .filter((image) => /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(image.url) || /^https?:\/\//i.test(image.url))
+    .slice(0, availableImageSlots);
+
+  for (const image of normalizedPromptImages) {
+    parts.push({ type: "image_url", image_url: { url: image.url } });
+    if (image.altText) {
+      parts.push({ type: "text", text: `Image note: ${image.altText}` });
+    }
   }
 
   if (parts.length === 0) {
@@ -178,6 +205,7 @@ export async function runCodegen(
 ): Promise<GenerateResult> {
   const {
     prompt,
+    promptImages,
     currentCode,
     projectContext,
     openRouterApiKey,
@@ -197,7 +225,7 @@ export async function runCodegen(
 
   const tools = buildToolDefinitions();
   const systemPrompt = buildSystemPrompt(currentCode, projectContext);
-  const userPromptContent = buildUserPromptContent(prompt);
+  const userPromptContent = buildUserPromptContent(prompt, promptImages);
 
   const messages: OpenRouterMessage[] = [
     { role: "system", content: systemPrompt },

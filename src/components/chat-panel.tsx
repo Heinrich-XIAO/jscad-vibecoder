@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Copy,
+  X,
 } from "lucide-react";
 import { getOpenRouterSettings } from "@/lib/openrouter";
 import { api } from "@/convex/_generated/api";
@@ -80,8 +81,14 @@ type StreamEvent =
   | { type: "error"; message: string };
 
 export interface ChatPanelHandle {
-  appendToInput: (content: string) => void;
+  addImageAttachment: (imageUrl: string, altText?: string) => void;
   focusInput: () => void;
+}
+
+interface PromptImageAttachment {
+  id: string;
+  url: string;
+  altText: string;
 }
 
 interface ChatPanelProps {
@@ -159,6 +166,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
 ) {
   const [pendingMessages, setPendingMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
+  const [pendingImages, setPendingImages] = useState<PromptImageAttachment[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [liveToolCalls, setLiveToolCalls] = useState<LiveToolCall[]>([]);
   const [streamStatus, setStreamStatus] = useState<string>("");
@@ -173,14 +181,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   useImperativeHandle(
     ref,
     () => ({
-      appendToInput: (content: string) => {
-        setInput((prev) => {
-          const trimmedPrev = prev.trimEnd();
-          if (!trimmedPrev) {
-            return content;
-          }
-          return `${trimmedPrev}\n\n${content}`;
-        });
+      addImageAttachment: (imageUrl: string, altText?: string) => {
+        const nextId = `img-${Math.random().toString(36).slice(2)}`;
+        const safeAlt = altText?.trim() || "Viewport snapshot";
+        setPendingImages((prev) => [...prev, { id: nextId, url: imageUrl, altText: safeAlt }]);
         requestAnimationFrame(() => {
           inputRef.current?.focus();
         });
@@ -286,14 +290,15 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   }, [persistMessage]);
 
   const enqueueUserPrompt = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, promptImages: Array<{ url: string; altText?: string }> = []) => {
       const pendingId = `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`;
+      const imageSummary = promptImages.length > 0 ? `\n\n[${promptImages.length} image attachment${promptImages.length === 1 ? "" : "s"}]` : "";
       setPendingMessages((prev) => [
         ...prev,
         {
           id: pendingId,
           role: "user",
-          content: prompt,
+          content: `${prompt}${imageSummary}`,
           pendingStatus: "sending",
         },
       ]);
@@ -303,6 +308,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
           projectId: projectId as Id<"projects">,
           ownerId,
           prompt,
+          promptImages,
         });
         if (result?.messageId) {
           setPendingMessages((prev) =>
@@ -337,7 +343,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     scrollToBottom();
   }, [displayedMessages, scrollToBottom]);
 
-  const generateResponse = useCallback(async (prompt: string) => {
+  const generateResponse = useCallback(async (prompt: string, promptImages: Array<{ url: string; altText?: string }> = []) => {
     setIsGenerating(true);
     setLiveToolCalls([]);
     setLiveAssistantMessage("");
@@ -351,6 +357,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
+          promptImages,
           currentCode,
           openRouterApiKey: settings.apiKey.trim(),
           model: settings.model,
@@ -563,7 +570,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               });
             }, 5000);
 
-            const result = await generateResponse(next.prompt);
+            const result = await generateResponse(next.prompt, next.promptImages ?? []);
             if (result.ok) {
               await completePrompt({
                 queueId: next.queueId,
@@ -601,10 +608,15 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() && pendingImages.length === 0) return;
 
-    const prompt = input.trim();
+    const prompt = input.trim() || "Please use the attached image context for this request.";
+    const promptImages = pendingImages.map((image) => ({
+      url: image.url,
+      altText: image.altText,
+    }));
     setInput("");
+    setPendingImages([]);
 
     const hasUserMessages = displayedMessages.some((msg) => msg.role === "user");
     const canAutoName = projectName
@@ -612,7 +624,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       : false;
 
     // Add user message immediately and queue it.
-    void enqueueUserPrompt(prompt);
+    void enqueueUserPrompt(prompt, promptImages);
 
     if (!hasUserMessages && canAutoName) {
       void (async () => {
@@ -647,6 +659,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     if (!prompt.trim()) return;
     await enqueueUserPrompt(prompt);
   }, [enqueueUserPrompt]);
+
+  const handleRemovePendingImage = useCallback((imageId: string) => {
+    setPendingImages((prev) => prev.filter((image) => image.id !== imageId));
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -726,6 +742,33 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         onSubmit={handleSubmit}
         className="border-t border-border p-3"
       >
+        {pendingImages.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {pendingImages.map((image) => (
+              <div
+                key={image.id}
+                className="group relative h-16 w-16 overflow-hidden rounded-md border border-border bg-secondary"
+                title={image.altText}
+              >
+                <img
+                  src={image.url}
+                  alt={image.altText}
+                  className="h-full w-full object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemovePendingImage(image.id)}
+                  className="absolute right-0.5 top-0.5 rounded-full bg-background/90 p-0.5 text-muted-foreground hover:text-foreground"
+                  aria-label="Remove attached image"
+                  title="Remove image"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="relative h-full">
           <textarea
             ref={inputRef}
@@ -733,12 +776,12 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Describe what you want to build..."
-            className="h-full w-full bg-background border border-input rounded-lg px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring"
-            rows={3}
+            className="h-full min-h-[130px] w-full bg-background border border-input rounded-lg px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring"
+            rows={6}
           />
           <button
             type="submit"
-            disabled={!input.trim()}
+            disabled={!input.trim() && pendingImages.length === 0}
             className="absolute right-2 bottom-2 p-2 rounded-md bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors"
           >
             {isGenerating ? (

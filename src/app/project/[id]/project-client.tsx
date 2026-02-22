@@ -431,8 +431,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         return;
       }
       const timestamp = new Date().toLocaleString();
-      const snapshotMarkdown = `Viewport snapshot (${timestamp})\n![Viewport snapshot ${timestamp}](${dataUrl})`;
-      chatPanelRef.current?.appendToInput(snapshotMarkdown);
+      chatPanelRef.current?.addImageAttachment(dataUrl, `Viewport snapshot ${timestamp}`);
       if (!showChat) {
         setShowChat(true);
       }

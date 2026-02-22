@@ -52,6 +52,14 @@ export default defineSchema({
     projectId: v.id("projects"),
     ownerId: v.string(),
     prompt: v.string(),
+    promptImages: v.optional(
+      v.array(
+        v.object({
+          url: v.string(),
+          altText: v.optional(v.string()),
+        })
+      )
+    ),
     userMessageId: v.id("chatMessages"),
     status: v.union(
       v.literal("queued"),
