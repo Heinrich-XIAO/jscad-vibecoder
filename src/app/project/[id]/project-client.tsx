@@ -428,14 +428,28 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     const rect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const edgeX = rect.width * 0.25;
-    const edgeY = rect.height * 0.25;
+    const normX = rect.width > 0 ? x / rect.width : 0.5;
+    const normY = rect.height > 0 ? y / rect.height : 0.5;
 
-    if (x < edgeX) return "left" as const;
-    if (x > rect.width - edgeX) return "right" as const;
-    if (y < edgeY) return "top" as const;
-    if (y > rect.height - edgeY) return "bottom" as const;
-    return "center" as const;
+    const centerInset = 0.3;
+    if (
+      normX >= centerInset &&
+      normX <= 1 - centerInset &&
+      normY >= centerInset &&
+      normY <= 1 - centerInset
+    ) {
+      return "center" as const;
+    }
+
+    const distances = [
+      { zone: "left" as const, value: normX },
+      { zone: "right" as const, value: 1 - normX },
+      { zone: "top" as const, value: normY },
+      { zone: "bottom" as const, value: 1 - normY },
+    ];
+    distances.sort((a, b) => a.value - b.value);
+    return distances[0].zone;
+
   }, []);
 
   const handlePaneDragStart = useCallback((paneId: PaneId, event: React.DragEvent<HTMLDivElement>) => {
@@ -557,8 +571,10 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const handleRootDropCapture = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     if (!draggingPane) return;
     event.preventDefault();
-    event.stopPropagation();
-  }, [draggingPane]);
+    if (event.target === event.currentTarget) {
+      clearPaneDrag();
+    }
+  }, [clearPaneDrag, draggingPane]);
 
   const startPairResize = useCallback((axis: "x" | "y", firstId: PaneId, secondId: PaneId, event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
