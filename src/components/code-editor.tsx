@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef, type DragEvent } from "react";
 import { useTheme } from "@/lib/theme-provider";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import { ChevronRight, Code2 } from "lucide-react";
@@ -16,6 +16,9 @@ interface CodeEditorProps {
   readOnly?: boolean;
   error?: JscadExecutionError | null;
   className?: string;
+  headerDraggable?: boolean;
+  onHeaderDragStart?: (event: DragEvent<HTMLDivElement>) => void;
+  onHeaderDragEnd?: () => void;
 }
 
 export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
@@ -24,6 +27,9 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   readOnly = false,
   error,
   className = "",
+  headerDraggable = false,
+  onHeaderDragStart,
+  onHeaderDragEnd,
 }, ref) => {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const monacoRef = useRef<Parameters<OnMount>[1] | null>(null);
@@ -150,7 +156,12 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   return (
     <div className={`flex flex-col h-full bg-card ${className}`}>
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+      <div
+        className={`flex items-center gap-2 px-4 py-3 border-b border-border ${headerDraggable ? "cursor-move" : ""}`}
+        draggable={headerDraggable}
+        onDragStart={onHeaderDragStart}
+        onDragEnd={onHeaderDragEnd}
+      >
         <Code2 className="w-4 h-4 text-emerald-500" />
         <h2 className="text-sm font-medium text-foreground">JSCAD Code</h2>
         {readOnly && (

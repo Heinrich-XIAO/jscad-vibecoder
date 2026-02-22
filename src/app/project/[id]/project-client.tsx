@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
-import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Undo2, Redo2 } from "lucide-react";
+import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Undo2, Redo2, Box } from "lucide-react";
 import { ChatPanel } from "@/components/chat-panel";
 import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
 import { Viewport3D, type Viewport3DHandle } from "@/components/viewport-3d";
@@ -30,6 +30,8 @@ interface ProjectPageProps {
 }
 
 type PaneId = "chat" | "code" | "viewport";
+type LayoutMode = "columns" | "rows" | "leftStack" | "rightStack";
+type DropZone = "left" | "right" | "top" | "bottom" | "center";
 
 const DEFAULT_PANE_ORDER: PaneId[] = ["chat", "code", "viewport"];
 
@@ -43,6 +45,12 @@ const MIN_PANE_WIDTH: Record<PaneId, number> = {
   chat: 260,
   code: 420,
   viewport: 320,
+};
+
+const MIN_PANE_HEIGHT: Record<PaneId, number> = {
+  chat: 200,
+  code: 240,
+  viewport: 220,
 };
 
 function normalizeRatios(ids: PaneId[], ratios: Record<PaneId, number>) {
@@ -85,6 +93,25 @@ function reorderVisiblePanes(
     visibleCursor += 1;
     return next;
   });
+}
+
+function withoutPane(ids: PaneId[], paneId: PaneId) {
+  return ids.filter((id) => id !== paneId);
+}
+
+function insertAroundTarget(
+  ids: PaneId[],
+  source: PaneId,
+  target: PaneId,
+  side: "left" | "right"
+) {
+  const base = withoutPane(ids, source);
+  const targetIndex = base.indexOf(target);
+  if (targetIndex === -1) return base;
+  const insertIndex = side === "left" ? targetIndex : targetIndex + 1;
+  const next = [...base];
+  next.splice(insertIndex, 0, source);
+  return next;
 }
 
 export default function ProjectPage({ id }: ProjectPageProps) {
@@ -132,9 +159,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [paneOrder, setPaneOrder] = useState<PaneId[]>(DEFAULT_PANE_ORDER);
   const [paneRatios, setPaneRatios] = useState<Record<PaneId, number>>(DEFAULT_PANE_RATIOS);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("columns");
+  const [stackPrimaryRatio, setStackPrimaryRatio] = useState(0.58);
+  const [stackSecondaryRatio, setStackSecondaryRatio] = useState(0.5);
   const [activePane, setActivePane] = useState<PaneId>("code");
   const [draggingPane, setDraggingPane] = useState<PaneId | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ paneId: PaneId; zone: DropZone } | null>(null);
   const [isResizing, setIsResizing] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const hasAutoFocusedChatRef = useRef(false);
@@ -145,12 +175,20 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const lastPersistedCodeRef = useRef("");
   const layoutRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef<{
-    leftId: PaneId;
-    rightId: PaneId;
-    startX: number;
-    startLeftRatio: number;
-    startRightRatio: number;
-    containerWidth: number;
+    axis: "x" | "y";
+    kind: "pair" | "stackPrimary" | "stackSecondary";
+    start: number;
+    leftId?: PaneId;
+    rightId?: PaneId;
+    topId?: PaneId;
+    bottomId?: PaneId;
+    startLeftRatio?: number;
+    startRightRatio?: number;
+    startTopRatio?: number;
+    startBottomRatio?: number;
+    startStackPrimaryRatio?: number;
+    startStackSecondaryRatio?: number;
+    containerSize: number;
   } | null>(null);
 
   const { execute } = useJscadWorker();
@@ -380,68 +418,203 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     }
   }, [activePane, visiblePaneIds]);
 
+  useEffect(() => {
+    if (visiblePaneIds.length < 3 && layoutMode !== "columns" && layoutMode !== "rows") {
+      setLayoutMode("columns");
+    }
+  }, [layoutMode, visiblePaneIds.length]);
+
+  const resolveDropZone = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const edgeX = rect.width * 0.25;
+    const edgeY = rect.height * 0.25;
+
+    if (x < edgeX) return "left" as const;
+    if (x > rect.width - edgeX) return "right" as const;
+    if (y < edgeY) return "top" as const;
+    if (y > rect.height - edgeY) return "bottom" as const;
+    return "center" as const;
+  }, []);
+
   const handlePaneDragStart = useCallback((paneId: PaneId, event: React.DragEvent<HTMLDivElement>) => {
     if (visiblePaneIds.length < 2) {
       event.preventDefault();
       return;
     }
     setDraggingPane(paneId);
-    setDropIndex(visiblePaneIds.indexOf(paneId));
     event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", paneId);
+    event.dataTransfer.setData("application/x-openmech-pane", paneId);
   }, [visiblePaneIds]);
 
-  const handlePaneDragOver = useCallback((event: React.DragEvent<HTMLDivElement>, index: number) => {
+  const handlePaneDragOver = useCallback((event: React.DragEvent<HTMLDivElement>, paneId: PaneId) => {
     if (!draggingPane) return;
     event.preventDefault();
-    const rect = event.currentTarget.getBoundingClientRect();
-    const midpoint = rect.left + rect.width / 2;
-    const next = event.clientX < midpoint ? index : index + 1;
-    if (next !== dropIndex) {
-      setDropIndex(next);
+    const zone = resolveDropZone(event);
+    if (!dropTarget || dropTarget.paneId !== paneId || dropTarget.zone !== zone) {
+      setDropTarget({ paneId, zone });
     }
-  }, [draggingPane, dropIndex]);
+  }, [draggingPane, dropTarget, resolveDropZone]);
 
   const clearPaneDrag = useCallback(() => {
     setDraggingPane(null);
-    setDropIndex(null);
+    setDropTarget(null);
   }, []);
 
-  const handlePaneDrop = useCallback((event: React.DragEvent<HTMLDivElement>, targetIndex: number) => {
+  const handlePaneDrop = useCallback((event: React.DragEvent<HTMLDivElement>, targetPane: PaneId) => {
     if (!draggingPane) return;
     event.preventDefault();
+    const zone = resolveDropZone(event);
 
-    const sourceIndex = visiblePaneIds.indexOf(draggingPane);
-    if (sourceIndex === -1) {
+    if (draggingPane === targetPane) {
       clearPaneDrag();
       return;
     }
 
-    const clampedTarget = Math.max(0, Math.min(targetIndex, visiblePaneIds.length));
-    const destinationIndex = clampedTarget > sourceIndex ? clampedTarget - 1 : clampedTarget;
+    if (zone === "center") {
+      const sourceIndex = visiblePaneIds.indexOf(draggingPane);
+      const targetIndex = visiblePaneIds.indexOf(targetPane);
+      if (sourceIndex !== -1 && targetIndex !== -1 && sourceIndex !== targetIndex) {
+        setPaneOrder((current) => reorderVisiblePanes(current, visiblePaneIds, sourceIndex, targetIndex));
+      }
+      clearPaneDrag();
+      return;
+    }
 
-    if (destinationIndex !== sourceIndex) {
-      setPaneOrder((current) => reorderVisiblePanes(current, visiblePaneIds, sourceIndex, destinationIndex));
+    if (zone === "left" || zone === "right") {
+      setLayoutMode("columns");
+      setPaneOrder((current) => {
+        const visible = current.filter((id) => visiblePaneIds.includes(id));
+        const reordered = insertAroundTarget(visible, draggingPane, targetPane, zone);
+        let cursor = 0;
+        return current.map((id) => {
+          if (!visiblePaneIds.includes(id)) return id;
+          const next = reordered[cursor];
+          cursor += 1;
+          return next;
+        });
+      });
+      clearPaneDrag();
+      return;
+    }
+
+    if (visiblePaneIds.length === 3) {
+      const targetIndex = visiblePaneIds.indexOf(targetPane);
+      if (targetIndex === 1) {
+        setLayoutMode("rows");
+        setPaneOrder((current) => {
+          const visible = current.filter((id) => visiblePaneIds.includes(id));
+          const reordered = insertAroundTarget(visible, draggingPane, targetPane, zone === "top" ? "left" : "right");
+          let cursor = 0;
+          return current.map((id) => {
+            if (!visiblePaneIds.includes(id)) return id;
+            const next = reordered[cursor];
+            cursor += 1;
+            return next;
+          });
+        });
+        clearPaneDrag();
+        return;
+      }
+
+      const remaining = visiblePaneIds.find((id) => id !== draggingPane && id !== targetPane);
+      if (remaining) {
+        const stackTop = zone === "top" ? draggingPane : targetPane;
+        const stackBottom = zone === "top" ? targetPane : draggingPane;
+
+        if (targetIndex === 0) {
+          setLayoutMode("rightStack");
+          setPaneOrder([stackTop, stackBottom, remaining]);
+        } else {
+          setLayoutMode("leftStack");
+          setPaneOrder([remaining, stackTop, stackBottom]);
+        }
+      }
+    } else {
+      setLayoutMode("rows");
+      setPaneOrder((current) => {
+        const visible = current.filter((id) => visiblePaneIds.includes(id));
+        const reordered = insertAroundTarget(visible, draggingPane, targetPane, zone === "top" ? "left" : "right");
+        let cursor = 0;
+        return current.map((id) => {
+          if (!visiblePaneIds.includes(id)) return id;
+          const next = reordered[cursor];
+          cursor += 1;
+          return next;
+        });
+      });
     }
 
     clearPaneDrag();
-  }, [clearPaneDrag, draggingPane, visiblePaneIds]);
+  }, [clearPaneDrag, draggingPane, resolveDropZone, visiblePaneIds]);
 
-  const handleSplitterMouseDown = useCallback((leftId: PaneId, rightId: PaneId, event: React.MouseEvent<HTMLDivElement>) => {
+  const handleRootDragOverCapture = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!draggingPane) return;
     event.preventDefault();
-    const containerWidth = layoutRef.current?.clientWidth ?? 0;
-    if (containerWidth <= 0) return;
+  }, [draggingPane]);
 
+  const handleRootDropCapture = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!draggingPane) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, [draggingPane]);
+
+  const startPairResize = useCallback((axis: "x" | "y", firstId: PaneId, secondId: PaneId, event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const container = layoutRef.current;
+    if (!container) return;
+    const containerSize = axis === "x" ? container.clientWidth : container.clientHeight;
+    if (containerSize <= 0) return;
+
+    const ratios = normalizeRatios(visiblePaneIds, paneRatios);
     resizeRef.current = {
-      leftId,
-      rightId,
-      startX: event.clientX,
-      startLeftRatio: visiblePaneRatios[leftId] ?? 0,
-      startRightRatio: visiblePaneRatios[rightId] ?? 0,
-      containerWidth,
+      axis,
+      kind: "pair",
+      start: axis === "x" ? event.clientX : event.clientY,
+      leftId: firstId,
+      rightId: secondId,
+      startLeftRatio: ratios[firstId] ?? 0,
+      startRightRatio: ratios[secondId] ?? 0,
+      containerSize,
     };
     setIsResizing(true);
-  }, [visiblePaneRatios]);
+  }, [paneRatios, visiblePaneIds]);
+
+  const startStackPrimaryResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const container = layoutRef.current;
+    if (!container) return;
+    const containerSize = container.clientWidth;
+    if (containerSize <= 0) return;
+    resizeRef.current = {
+      axis: "x",
+      kind: "stackPrimary",
+      start: event.clientX,
+      startStackPrimaryRatio: stackPrimaryRatio,
+      containerSize,
+    };
+    setIsResizing(true);
+  }, [stackPrimaryRatio]);
+
+  const startStackSecondaryResize = useCallback((topId: PaneId, bottomId: PaneId, event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const container = layoutRef.current;
+    if (!container) return;
+    const containerSize = container.clientHeight;
+    if (containerSize <= 0) return;
+
+    resizeRef.current = {
+      axis: "y",
+      kind: "stackSecondary",
+      start: event.clientY,
+      topId,
+      bottomId,
+      startStackSecondaryRatio: stackSecondaryRatio,
+      containerSize,
+    };
+    setIsResizing(true);
+  }, [stackSecondaryRatio]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -450,32 +623,51 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       const activeResize = resizeRef.current;
       if (!activeResize) return;
 
-      const deltaRatio = (event.clientX - activeResize.startX) / activeResize.containerWidth;
-      const pairTotal = activeResize.startLeftRatio + activeResize.startRightRatio;
-      const leftMin = MIN_PANE_WIDTH[activeResize.leftId] / activeResize.containerWidth;
-      const rightMin = MIN_PANE_WIDTH[activeResize.rightId] / activeResize.containerWidth;
+      const currentPos = activeResize.axis === "x" ? event.clientX : event.clientY;
+      const deltaRatio = (currentPos - activeResize.start) / activeResize.containerSize;
 
-      let nextLeft: number;
-      let nextRight: number;
+      if (activeResize.kind === "pair") {
+        if (!activeResize.leftId || !activeResize.rightId) return;
+        const leftId = activeResize.leftId;
+        const rightId = activeResize.rightId;
+        const startLeft = activeResize.startLeftRatio ?? 0;
+        const startRight = activeResize.startRightRatio ?? 0;
+        const pairTotal = startLeft + startRight;
+        const minLeft = (activeResize.axis === "x" ? MIN_PANE_WIDTH[leftId] : MIN_PANE_HEIGHT[leftId]) / activeResize.containerSize;
+        const minRight = (activeResize.axis === "x" ? MIN_PANE_WIDTH[rightId] : MIN_PANE_HEIGHT[rightId]) / activeResize.containerSize;
 
-      if (pairTotal <= leftMin + rightMin) {
-        const leftShare = leftMin / (leftMin + rightMin);
-        nextLeft = pairTotal * leftShare;
-        nextRight = pairTotal - nextLeft;
-      } else {
-        nextLeft = Math.max(leftMin, Math.min(pairTotal - rightMin, activeResize.startLeftRatio + deltaRatio));
-        nextRight = pairTotal - nextLeft;
+        let nextLeft = startLeft + deltaRatio;
+        nextLeft = Math.max(minLeft, Math.min(pairTotal - minRight, nextLeft));
+        const nextRight = pairTotal - nextLeft;
+
+        setPaneRatios((current) => {
+          const normalized = normalizeRatios(visiblePaneIds, current);
+          normalized[leftId] = nextLeft;
+          normalized[rightId] = nextRight;
+          return {
+            ...current,
+            ...normalized,
+          };
+        });
+        return;
       }
 
-      setPaneRatios((current) => {
-        const normalized = normalizeRatios(visiblePaneIds, current);
-        normalized[activeResize.leftId] = nextLeft;
-        normalized[activeResize.rightId] = nextRight;
-        return {
-          ...current,
-          ...normalized,
-        };
-      });
+      if (activeResize.kind === "stackPrimary") {
+        const startRatio = activeResize.startStackPrimaryRatio ?? stackPrimaryRatio;
+        const next = Math.max(0.24, Math.min(0.76, startRatio + deltaRatio));
+        setStackPrimaryRatio(next);
+        return;
+      }
+
+      if (activeResize.kind === "stackSecondary") {
+        if (!activeResize.topId || !activeResize.bottomId) return;
+        const startRatio = activeResize.startStackSecondaryRatio ?? stackSecondaryRatio;
+        const minTop = MIN_PANE_HEIGHT[activeResize.topId] / activeResize.containerSize;
+        const minBottom = MIN_PANE_HEIGHT[activeResize.bottomId] / activeResize.containerSize;
+        let next = startRatio + deltaRatio;
+        next = Math.max(minTop, Math.min(1 - minBottom, next));
+        setStackSecondaryRatio(next);
+      }
     };
 
     const handlePointerUp = () => {
@@ -711,10 +903,119 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     );
   }
 
-  const paneTitles: Record<PaneId, string> = {
-    chat: "Chat",
-    code: "Code",
-    viewport: "Viewport",
+  const activeDropPane = dropTarget?.paneId ?? null;
+  const activeDropZone = dropTarget?.zone ?? null;
+
+  const renderPane = (paneId: PaneId, style?: React.CSSProperties, extraClassName?: string) => {
+    const isActive = activePane === paneId;
+    const showDrop = draggingPane !== null && draggingPane !== paneId && activeDropPane === paneId && activeDropZone;
+
+    return (
+      <div
+        key={paneId}
+        className={`relative min-w-0 min-h-0 flex flex-col bg-card border-border ${isActive ? "ring-1 ring-primary/30" : ""} ${extraClassName ?? ""}`}
+        style={style}
+        onClick={() => setActivePane(paneId)}
+        onDragOver={(event) => handlePaneDragOver(event, paneId)}
+        onDrop={(event) => handlePaneDrop(event, paneId)}
+      >
+        {showDrop && activeDropZone === "left" && <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary/70 pointer-events-none z-20" />}
+        {showDrop && activeDropZone === "right" && <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-primary/70 pointer-events-none z-20" />}
+        {showDrop && activeDropZone === "top" && <div className="absolute left-0 right-0 top-0 h-1.5 bg-primary/70 pointer-events-none z-20" />}
+        {showDrop && activeDropZone === "bottom" && <div className="absolute left-0 right-0 bottom-0 h-1.5 bg-primary/70 pointer-events-none z-20" />}
+        {showDrop && activeDropZone === "center" && <div className="absolute inset-0 border-2 border-primary/70 pointer-events-none z-20" />}
+
+        {paneId === "chat" && projectId && userId && (
+          <ChatPanel
+            projectId={projectId}
+            projectName={project?.name}
+            currentCode={code}
+            onCodeChange={handleCodeChange}
+            onPromptComplete={handlePromptComplete}
+            inputRef={chatInputRef}
+            ownerId={userId}
+            headerDraggable={visiblePaneIds.length > 1}
+            onHeaderDragStart={(event) => handlePaneDragStart("chat", event)}
+            onHeaderDragEnd={clearPaneDrag}
+          />
+        )}
+
+        {paneId === "code" && (
+          <CodeEditor
+            code={code}
+            onChange={handleCodeChange}
+            error={error}
+            ref={editorRef}
+            headerDraggable={visiblePaneIds.length > 1}
+            onHeaderDragStart={(event) => handlePaneDragStart("code", event)}
+            onHeaderDragEnd={clearPaneDrag}
+          />
+        )}
+
+        {paneId === "viewport" && (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <div
+              className={`flex items-center gap-2 px-4 py-3 border-b border-border ${visiblePaneIds.length > 1 ? "cursor-move" : ""}`}
+              draggable={visiblePaneIds.length > 1}
+              onDragStart={(event) => handlePaneDragStart("viewport", event)}
+              onDragEnd={clearPaneDrag}
+            >
+              <Box className="w-4 h-4 text-cyan-500" />
+              <h2 className="text-sm font-medium text-foreground">Viewport</h2>
+            </div>
+
+            <div className="flex-1 min-h-0">
+              <Viewport3D
+                geometry={geometry}
+                isGenerating={isGenerating}
+                ref={viewportRef}
+              />
+            </div>
+
+            {showGeometryInfo && (
+              <div className="border-t border-border p-4 max-h-80 overflow-y-auto">
+                <GeometryInfo geometry={geometry} />
+              </div>
+            )}
+
+            {parameterDefs.length > 0 && (
+              <div className="border-t border-border p-4 max-h-48 overflow-y-auto">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium flex items-center gap-2">
+                    <Code className="w-4 h-4" />
+                    Parameters
+                  </h3>
+                  <button
+                    onClick={handleResetParameters}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    title="Reset to defaults"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <ParameterSliders
+                  parameters={parameterDefs}
+                  values={parameters}
+                  onChange={handleParameterChange}
+                  onReset={handleResetParameter}
+                  ref={parametersRef}
+                />
+              </div>
+            )}
+
+            {showVersions && versions && (
+              <div className="border-t border-border p-4 max-h-64 overflow-y-auto">
+                <VersionHistory
+                  versions={versions}
+                  currentVersionId={currentVersionId}
+                  onLoadVersion={handleLoadVersion}
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -820,128 +1121,93 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
       <div
         ref={layoutRef}
-        className={`flex-1 flex overflow-hidden ${isResizing ? "cursor-col-resize select-none" : ""}`}
+        className={`flex-1 flex overflow-hidden ${isResizing ? "select-none" : ""}`}
+        onDragOverCapture={handleRootDragOverCapture}
+        onDropCapture={handleRootDropCapture}
       >
-        {visiblePaneIds.map((paneId, index) => {
-          const ratio = Math.max(0.01, visiblePaneRatios[paneId] ?? 0.01);
-          const isActive = activePane === paneId;
-          const showDropLeft = draggingPane !== null && dropIndex === index;
-          const showDropRight = draggingPane !== null && dropIndex === index + 1;
+        {(() => {
+          const ordered = visiblePaneIds;
 
-          return (
-            <div key={paneId} className="contents">
-              <div
-                className={`relative min-w-0 flex flex-col bg-card border-border ${index > 0 ? "border-l" : ""} ${isActive ? "ring-1 ring-primary/30" : ""}`}
-                style={{ flexBasis: 0, flexGrow: ratio, flexShrink: 1 }}
-                onClick={() => setActivePane(paneId)}
-                onDragOver={(event) => handlePaneDragOver(event, index)}
-                onDrop={(event) => handlePaneDrop(event, dropIndex ?? index)}
-              >
-                {showDropLeft && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary/70 pointer-events-none z-20" />
-                )}
-                {showDropRight && (
-                  <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-primary/70 pointer-events-none z-20" />
-                )}
+          if (ordered.length <= 1) {
+            return renderPane(ordered[0], { flex: 1 }, "border-l");
+          }
 
-                <div
-                  draggable={visiblePaneIds.length > 1}
-                  onDragStart={(event) => handlePaneDragStart(paneId, event)}
-                  onDragEnd={clearPaneDrag}
-                  className="h-9 px-3 border-b border-border flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground cursor-move"
-                >
-                  <span>{paneTitles[paneId]}</span>
-                  <span className="text-[10px] opacity-70">drag</span>
-                </div>
-
-                {paneId === "chat" && projectId && userId && (
-                  <div className="flex-1 min-h-0">
-                    <ChatPanel
-                      projectId={projectId}
-                      projectName={project?.name}
-                      currentCode={code}
-                      onCodeChange={handleCodeChange}
-                      onPromptComplete={handlePromptComplete}
-                      inputRef={chatInputRef}
-                      ownerId={userId}
-                    />
-                  </div>
-                )}
-
-                {paneId === "code" && (
-                  <div className="flex-1 min-h-0">
-                    <CodeEditor
-                      code={code}
-                      onChange={handleCodeChange}
-                      error={error}
-                      ref={editorRef}
-                    />
-                  </div>
-                )}
-
-                {paneId === "viewport" && (
-                  <div className="flex-1 min-h-0 flex flex-col">
-                    <div className="flex-1 min-h-0">
-                      <Viewport3D
-                        geometry={geometry}
-                        isGenerating={isGenerating}
-                        ref={viewportRef}
+          if (layoutMode === "rows") {
+            return (
+              <div className="flex-1 min-h-0 flex flex-col">
+                {ordered.map((paneId, index) => (
+                  <div key={paneId} className="contents">
+                    {renderPane(paneId, { flexBasis: 0, flexGrow: visiblePaneRatios[paneId], flexShrink: 1 }, "border-l")}
+                    {index < ordered.length - 1 && (
+                      <div
+                        className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
+                        onMouseDown={(event) => startPairResize("y", paneId, ordered[index + 1], event)}
                       />
-                    </div>
-
-                    {showGeometryInfo && (
-                      <div className="border-t border-border p-4 max-h-80 overflow-y-auto">
-                        <GeometryInfo geometry={geometry} />
-                      </div>
-                    )}
-
-                    {parameterDefs.length > 0 && (
-                      <div className="border-t border-border p-4 max-h-48 overflow-y-auto">
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-sm font-medium flex items-center gap-2">
-                            <Code className="w-4 h-4" />
-                            Parameters
-                          </h3>
-                          <button
-                            onClick={handleResetParameters}
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            title="Reset to defaults"
-                          >
-                            Reset
-                          </button>
-                        </div>
-                        <ParameterSliders
-                          parameters={parameterDefs}
-                          values={parameters}
-                          onChange={handleParameterChange}
-                          onReset={handleResetParameter}
-                          ref={parametersRef}
-                        />
-                      </div>
-                    )}
-
-                    {showVersions && versions && (
-                      <div className="border-t border-border p-4 max-h-64 overflow-y-auto">
-                        <VersionHistory
-                          versions={versions}
-                          currentVersionId={currentVersionId}
-                          onLoadVersion={handleLoadVersion}
-                        />
-                      </div>
                     )}
                   </div>
-                )}
+                ))}
               </div>
+            );
+          }
 
-              {index < visiblePaneIds.length - 1 && (
+          if (layoutMode === "leftStack" && ordered.length === 3) {
+            const [leftPane, topPane, bottomPane] = ordered;
+            return (
+              <div className="flex-1 min-h-0 flex">
+                {renderPane(leftPane, { flexBasis: 0, flexGrow: stackPrimaryRatio, flexShrink: 1 }, "border-l")}
                 <div
                   className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
-                  onMouseDown={(event) => handleSplitterMouseDown(paneId, visiblePaneIds[index + 1], event)}
+                  onMouseDown={startStackPrimaryResize}
                 />
-              )}
+                <div className="flex-1 min-h-0 flex flex-col">
+                  {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 }, "border-l")}
+                  <div
+                    className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
+                    onMouseDown={(event) => startStackSecondaryResize(topPane, bottomPane, event)}
+                  />
+                  {renderPane(bottomPane, { flexBasis: 0, flexGrow: 1 - stackSecondaryRatio, flexShrink: 1 }, "border-l")}
+                </div>
+              </div>
+            );
+          }
+
+          if (layoutMode === "rightStack" && ordered.length === 3) {
+            const [topPane, bottomPane, rightPane] = ordered;
+            return (
+              <div className="flex-1 min-h-0 flex">
+                <div className="flex-1 min-h-0 flex flex-col">
+                  {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 }, "border-l")}
+                  <div
+                    className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
+                    onMouseDown={(event) => startStackSecondaryResize(topPane, bottomPane, event)}
+                  />
+                  {renderPane(bottomPane, { flexBasis: 0, flexGrow: 1 - stackSecondaryRatio, flexShrink: 1 }, "border-l")}
+                </div>
+                <div
+                  className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
+                  onMouseDown={startStackPrimaryResize}
+                />
+                {renderPane(rightPane, { flexBasis: 0, flexGrow: 1 - stackPrimaryRatio, flexShrink: 1 }, "border-l")}
+              </div>
+            );
+          }
+
+          return (
+            <div className="flex-1 min-h-0 flex">
+              {ordered.map((paneId, index) => (
+                <div key={paneId} className="contents">
+                  {renderPane(paneId, { flexBasis: 0, flexGrow: visiblePaneRatios[paneId], flexShrink: 1 }, "border-l")}
+                  {index < ordered.length - 1 && (
+                    <div
+                      className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
+                      onMouseDown={(event) => startPairResize("x", paneId, ordered[index + 1], event)}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           );
-        })}
+        })()}
       </div>
 
       <ExportDialog
