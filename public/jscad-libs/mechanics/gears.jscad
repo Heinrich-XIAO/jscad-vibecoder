@@ -248,7 +248,7 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 			);
 			this.thickness = this.thickness*2;
 		}
-		return result.rotateZ(this.initialPhaseOffsetDegrees);
+		return result;
 	};
 }
 
