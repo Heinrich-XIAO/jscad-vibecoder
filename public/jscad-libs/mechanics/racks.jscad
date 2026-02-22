@@ -96,7 +96,7 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 	this.addendum = this.module;
 	this.dedendum = this.addendum + this.clearance;
 	this.pitchLineY = 0;
-	this.phaseOriginX = -this.length / 2.0;
+	this.phaseOriginX = 0;
 
 	this.getPitchFeatures = function() {
 		return {
@@ -136,8 +136,8 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 			circularPitch: this.circularPitch,
 			effectiveLength: this.length,
 			effectiveTeethNumber: this.teethNumber,
-			referenceToothCenterAtStart: this.phaseOriginX + this.circularPitch / 2,
-			description: 'Rack pitch-line phase origin is the left edge at x=-length/2. Tooth centers are offset by half circular pitch.'
+			referenceToothCenterAtStart: this.circularPitch / 2,
+			description: 'Rack pitch-line phase origin is at x=0 (left end). Tooth centers are offset by half circular pitch. Rack extends from x=0 to x=length.'
 		};
 	};
 
@@ -152,17 +152,17 @@ window.jscad.tspi.involuteRack = function(printer, params) {
 		var overlap = Math.max(0.01, this.module * 0.02);
 		var baseTop = -this.dedendum + overlap;
 		var basePoints = [
-			[-baseWidth / 2, baseTop],
-			[baseWidth / 2, baseTop],
-			[baseWidth / 2, baseTop - baseHeight],
-			[-baseWidth / 2, baseTop - baseHeight]
+			[0, baseTop],
+			[baseWidth, baseTop],
+			[baseWidth, baseTop - baseHeight],
+			[0, baseTop - baseHeight]
 		];
 		var basePolygon = new CSG.Polygon2D(basePoints.map(p => new CSG.Vector2D(p[0], p[1])));
 		var baseBar = basePolygon.extrude({ offset: [0, 0, this.thickness] });
 
 		var rackTeeth = null;
 		for(var i = 0; i < this.teethNumber; i++) {
-			var offset = (-this.length / 2.0) + (i + 0.5) * pitch;
+			var offset = (i + 0.5) * pitch;
 			var tooth = singleTooth.translate([offset, 0, 0]);
 			rackTeeth = rackTeeth ? union(rackTeeth, tooth) : tooth;
 		}
