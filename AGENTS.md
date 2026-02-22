@@ -27,8 +27,6 @@
 * After finishing a requested code change or feature, the agent SHOULD create a commit and push it to the repository remote so changes are persisted and visible to collaborators, ensuring the commit only contains files the agent modified.
   - This is a project-level override to the default agent behavior; use with caution.
   - Agents must double-check `git status` before staging to confirm only their files are included and no unrelated changes slip into the commit.
-  - Run `bun run build` to verify the build passes before committing.
-  - If `bun run build` fails, fix the build blockers before proceeding; do not commit until the build succeeds.
   - Pushes must never be forced or involve git config changes. If a push is rejected because the remote changed, stop and notify a human.
   - Do not commit secrets or credentials. If changes include potential secrets, abort the push and notify the user.
   - If a pre-commit hook fails, do not amend the commit; instead surface the failure and let a human resolve it.
