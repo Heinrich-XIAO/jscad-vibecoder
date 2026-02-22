@@ -742,33 +742,6 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         onSubmit={handleSubmit}
         className="border-t border-border p-3"
       >
-        {pendingImages.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {pendingImages.map((image) => (
-              <div
-                key={image.id}
-                className="group relative h-16 w-16 overflow-hidden rounded-md border border-border bg-secondary"
-                title={image.altText}
-              >
-                <img
-                  src={image.url}
-                  alt={image.altText}
-                  className="h-full w-full object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleRemovePendingImage(image.id)}
-                  className="absolute right-0.5 top-0.5 rounded-full bg-background/90 p-0.5 text-muted-foreground hover:text-foreground"
-                  aria-label="Remove attached image"
-                  title="Remove image"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
         <div className="relative h-full">
           <textarea
             ref={inputRef}
@@ -776,9 +749,35 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Describe what you want to build..."
-            className="h-full min-h-[130px] w-full bg-background border border-input rounded-lg px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring"
+            className="h-full min-h-[130px] w-full bg-background border border-input rounded-lg px-4 py-3 pr-12 pb-20 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring"
             rows={6}
           />
+          {pendingImages.length > 0 && (
+            <div className="absolute left-2 bottom-2 z-10 flex max-w-[75%] items-center gap-2 overflow-x-auto rounded-md bg-background/85 p-1 backdrop-blur-sm">
+              {pendingImages.map((image) => (
+                <div
+                  key={image.id}
+                  className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border bg-secondary"
+                  title={image.altText}
+                >
+                  <img
+                    src={image.url}
+                    alt={image.altText}
+                    className="h-full w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePendingImage(image.id)}
+                    className="absolute right-0.5 top-0.5 rounded-full bg-background/90 p-0.5 text-muted-foreground hover:text-foreground"
+                    aria-label="Remove attached image"
+                    title="Remove image"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <button
             type="submit"
             disabled={!input.trim() && pendingImages.length === 0}
