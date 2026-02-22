@@ -29,6 +29,64 @@ interface ProjectPageProps {
   id: string;
 }
 
+type PaneId = "chat" | "code" | "viewport";
+
+const DEFAULT_PANE_ORDER: PaneId[] = ["chat", "code", "viewport"];
+
+const DEFAULT_PANE_RATIOS: Record<PaneId, number> = {
+  chat: 0.24,
+  code: 0.46,
+  viewport: 0.3,
+};
+
+const MIN_PANE_WIDTH: Record<PaneId, number> = {
+  chat: 260,
+  code: 420,
+  viewport: 320,
+};
+
+function normalizeRatios(ids: PaneId[], ratios: Record<PaneId, number>) {
+  const total = ids.reduce((sum, id) => sum + Math.max(0.01, ratios[id] ?? 0.01), 0);
+  const normalized: Record<PaneId, number> = {
+    chat: 0,
+    code: 0,
+    viewport: 0,
+  };
+
+  if (total <= 0) {
+    const fallback = 1 / ids.length;
+    ids.forEach((id) => {
+      normalized[id] = fallback;
+    });
+    return normalized;
+  }
+
+  ids.forEach((id) => {
+    normalized[id] = Math.max(0.01, ratios[id] ?? 0.01) / total;
+  });
+
+  return normalized;
+}
+
+function reorderVisiblePanes(
+  paneOrder: PaneId[],
+  visibleIds: PaneId[],
+  fromIndex: number,
+  toIndex: number
+) {
+  const orderedVisible = [...visibleIds];
+  const [moved] = orderedVisible.splice(fromIndex, 1);
+  orderedVisible.splice(toIndex, 0, moved);
+
+  let visibleCursor = 0;
+  return paneOrder.map((paneId) => {
+    if (!visibleIds.includes(paneId)) return paneId;
+    const next = orderedVisible[visibleCursor];
+    visibleCursor += 1;
+    return next;
+  });
+}
+
 export default function ProjectPage({ id }: ProjectPageProps) {
   const router = useRouter();
   const { userId } = useAuth();
@@ -72,6 +130,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showGeometryInfo, setShowGeometryInfo] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [paneOrder, setPaneOrder] = useState<PaneId[]>(DEFAULT_PANE_ORDER);
+  const [paneRatios, setPaneRatios] = useState<Record<PaneId, number>>(DEFAULT_PANE_RATIOS);
+  const [activePane, setActivePane] = useState<PaneId>("code");
+  const [draggingPane, setDraggingPane] = useState<PaneId | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const hasAutoFocusedChatRef = useRef(false);
   const viewportRef = useRef<Viewport3DHandle>(null);
@@ -79,8 +143,30 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const parametersRef = useRef<ParameterSlidersHandle>(null);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPersistedCodeRef = useRef("");
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const resizeRef = useRef<{
+    leftId: PaneId;
+    rightId: PaneId;
+    startX: number;
+    startLeftRatio: number;
+    startRightRatio: number;
+    containerWidth: number;
+  } | null>(null);
 
   const { execute } = useJscadWorker();
+
+  const isChatVisible = showChat && !!projectId && !!userId;
+
+  const visiblePaneIds = useMemo(() => {
+    return paneOrder.filter((id) => {
+      if (id === "chat") return isChatVisible;
+      return true;
+    });
+  }, [isChatVisible, paneOrder]);
+
+  const visiblePaneRatios = useMemo(() => {
+    return normalizeRatios(visiblePaneIds, paneRatios);
+  }, [paneRatios, visiblePaneIds]);
 
   useEffect(() => {
     if (project && !code && project.currentVersion?.jscadCode) {
@@ -288,6 +374,123 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     void autosaveDraft();
   }, [autosaveDraft]);
 
+  useEffect(() => {
+    if (!visiblePaneIds.includes(activePane) && visiblePaneIds.length > 0) {
+      setActivePane(visiblePaneIds[0]);
+    }
+  }, [activePane, visiblePaneIds]);
+
+  const handlePaneDragStart = useCallback((paneId: PaneId, event: React.DragEvent<HTMLDivElement>) => {
+    if (visiblePaneIds.length < 2) {
+      event.preventDefault();
+      return;
+    }
+    setDraggingPane(paneId);
+    setDropIndex(visiblePaneIds.indexOf(paneId));
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", paneId);
+  }, [visiblePaneIds]);
+
+  const handlePaneDragOver = useCallback((event: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (!draggingPane) return;
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const midpoint = rect.left + rect.width / 2;
+    const next = event.clientX < midpoint ? index : index + 1;
+    if (next !== dropIndex) {
+      setDropIndex(next);
+    }
+  }, [draggingPane, dropIndex]);
+
+  const clearPaneDrag = useCallback(() => {
+    setDraggingPane(null);
+    setDropIndex(null);
+  }, []);
+
+  const handlePaneDrop = useCallback((event: React.DragEvent<HTMLDivElement>, targetIndex: number) => {
+    if (!draggingPane) return;
+    event.preventDefault();
+
+    const sourceIndex = visiblePaneIds.indexOf(draggingPane);
+    if (sourceIndex === -1) {
+      clearPaneDrag();
+      return;
+    }
+
+    const clampedTarget = Math.max(0, Math.min(targetIndex, visiblePaneIds.length));
+    const destinationIndex = clampedTarget > sourceIndex ? clampedTarget - 1 : clampedTarget;
+
+    if (destinationIndex !== sourceIndex) {
+      setPaneOrder((current) => reorderVisiblePanes(current, visiblePaneIds, sourceIndex, destinationIndex));
+    }
+
+    clearPaneDrag();
+  }, [clearPaneDrag, draggingPane, visiblePaneIds]);
+
+  const handleSplitterMouseDown = useCallback((leftId: PaneId, rightId: PaneId, event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const containerWidth = layoutRef.current?.clientWidth ?? 0;
+    if (containerWidth <= 0) return;
+
+    resizeRef.current = {
+      leftId,
+      rightId,
+      startX: event.clientX,
+      startLeftRatio: visiblePaneRatios[leftId] ?? 0,
+      startRightRatio: visiblePaneRatios[rightId] ?? 0,
+      containerWidth,
+    };
+    setIsResizing(true);
+  }, [visiblePaneRatios]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const activeResize = resizeRef.current;
+      if (!activeResize) return;
+
+      const deltaRatio = (event.clientX - activeResize.startX) / activeResize.containerWidth;
+      const pairTotal = activeResize.startLeftRatio + activeResize.startRightRatio;
+      const leftMin = MIN_PANE_WIDTH[activeResize.leftId] / activeResize.containerWidth;
+      const rightMin = MIN_PANE_WIDTH[activeResize.rightId] / activeResize.containerWidth;
+
+      let nextLeft: number;
+      let nextRight: number;
+
+      if (pairTotal <= leftMin + rightMin) {
+        const leftShare = leftMin / (leftMin + rightMin);
+        nextLeft = pairTotal * leftShare;
+        nextRight = pairTotal - nextLeft;
+      } else {
+        nextLeft = Math.max(leftMin, Math.min(pairTotal - rightMin, activeResize.startLeftRatio + deltaRatio));
+        nextRight = pairTotal - nextLeft;
+      }
+
+      setPaneRatios((current) => {
+        const normalized = normalizeRatios(visiblePaneIds, current);
+        normalized[activeResize.leftId] = nextLeft;
+        normalized[activeResize.rightId] = nextRight;
+        return {
+          ...current,
+          ...normalized,
+        };
+      });
+    };
+
+    const handlePointerUp = () => {
+      resizeRef.current = null;
+      setIsResizing(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isResizing, visiblePaneIds]);
+
   // Keyboard shortcuts - must be defined after all handler functions
   const shortcuts: KeyboardShortcut[] = useMemo(
     () => [
@@ -399,7 +602,13 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       {
         key: "/",
         ctrl: true,
-        handler: () => setShowChat((v) => !v),
+        handler: () => {
+          setShowChat((v) => {
+            const next = !v;
+            if (next) setActivePane("chat");
+            return next;
+          });
+        },
         description: "Toggle chat",
         group: "Panels",
       },
@@ -422,6 +631,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         ctrl: true,
         handler: () => {
           if (!showChat) setShowChat(true);
+          setActivePane("chat");
           // Focus the chat input after a tick so it's rendered
           setTimeout(() => chatInputRef.current?.focus(), 50);
         },
@@ -482,6 +692,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       undoCode,
       redoCode,
       showChat,
+      setActivePane,
       showExport,
       showSettings,
       showVersions,
@@ -499,6 +710,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       </div>
     );
   }
+
+  const paneTitles: Record<PaneId, string> = {
+    chat: "Chat",
+    code: "Code",
+    viewport: "Viewport",
+  };
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
@@ -536,7 +753,11 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             <BarChart3 className="w-5 h-5" />
           </button>
           <button
-            onClick={() => setShowChat(!showChat)}
+            onClick={() => {
+              const next = !showChat;
+              setShowChat(next);
+              if (next) setActivePane("chat");
+            }}
             className={`p-2 rounded-lg transition-colors ${showChat ? "bg-primary/20 text-primary" : "hover:bg-secondary"}`}
             title="Toggle Chat (Ctrl+/)"
           >
@@ -597,82 +818,130 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        {showChat && projectId && userId && (
-          <div className="w-80 border-r border-border flex flex-col bg-card">
-            <ChatPanel
-              projectId={projectId}
-              projectName={project?.name}
-              currentCode={code}
-              onCodeChange={handleCodeChange}
-              onPromptComplete={handlePromptComplete}
-              inputRef={chatInputRef}
-              ownerId={userId}
-            />
-          </div>
-        )}
+      <div
+        ref={layoutRef}
+        className={`flex-1 flex overflow-hidden ${isResizing ? "cursor-col-resize select-none" : ""}`}
+      >
+        {visiblePaneIds.map((paneId, index) => {
+          const ratio = Math.max(0.01, visiblePaneRatios[paneId] ?? 0.01);
+          const isActive = activePane === paneId;
+          const showDropLeft = draggingPane !== null && dropIndex === index;
+          const showDropRight = draggingPane !== null && dropIndex === index + 1;
 
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex-1 relative">
-            <CodeEditor
-              code={code}
-              onChange={handleCodeChange}
-              error={error}
-              ref={editorRef}
-            />
-          </div>
-        </div>
+          return (
+            <div key={paneId} className="contents">
+              <div
+                className={`relative min-w-0 flex flex-col bg-card border-border ${index > 0 ? "border-l" : ""} ${isActive ? "ring-1 ring-primary/30" : ""}`}
+                style={{ flexBasis: 0, flexGrow: ratio, flexShrink: 1 }}
+                onClick={() => setActivePane(paneId)}
+                onDragOver={(event) => handlePaneDragOver(event, index)}
+                onDrop={(event) => handlePaneDrop(event, dropIndex ?? index)}
+              >
+                {showDropLeft && (
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary/70 pointer-events-none z-20" />
+                )}
+                {showDropRight && (
+                  <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-primary/70 pointer-events-none z-20" />
+                )}
 
-        <div className="w-96 border-l border-border flex flex-col bg-card">
-          <div className="flex-1 min-h-0">
-            <Viewport3D
-              geometry={geometry}
-              isGenerating={isGenerating}
-              ref={viewportRef}
-            />
-          </div>
-
-          {showGeometryInfo && (
-            <div className="border-t border-border p-4 max-h-80 overflow-y-auto">
-              <GeometryInfo geometry={geometry} />
-            </div>
-          )}
-
-          {parameterDefs.length > 0 && (
-            <div className="border-t border-border p-4 max-h-48 overflow-y-auto">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <Code className="w-4 h-4" />
-                  Parameters
-                </h3>
-                <button
-                  onClick={handleResetParameters}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  title="Reset to defaults"
+                <div
+                  draggable={visiblePaneIds.length > 1}
+                  onDragStart={(event) => handlePaneDragStart(paneId, event)}
+                  onDragEnd={clearPaneDrag}
+                  className="h-9 px-3 border-b border-border flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground cursor-move"
                 >
-                  Reset
-                </button>
-              </div>
-              <ParameterSliders
-                parameters={parameterDefs}
-                values={parameters}
-                onChange={handleParameterChange}
-                onReset={handleResetParameter}
-                ref={parametersRef}
-              />
-            </div>
-          )}
+                  <span>{paneTitles[paneId]}</span>
+                  <span className="text-[10px] opacity-70">drag</span>
+                </div>
 
-          {showVersions && versions && (
-            <div className="border-t border-border p-4 max-h-64 overflow-y-auto">
-              <VersionHistory
-                versions={versions}
-                currentVersionId={currentVersionId}
-                onLoadVersion={handleLoadVersion}
-              />
+                {paneId === "chat" && projectId && userId && (
+                  <div className="flex-1 min-h-0">
+                    <ChatPanel
+                      projectId={projectId}
+                      projectName={project?.name}
+                      currentCode={code}
+                      onCodeChange={handleCodeChange}
+                      onPromptComplete={handlePromptComplete}
+                      inputRef={chatInputRef}
+                      ownerId={userId}
+                    />
+                  </div>
+                )}
+
+                {paneId === "code" && (
+                  <div className="flex-1 min-h-0">
+                    <CodeEditor
+                      code={code}
+                      onChange={handleCodeChange}
+                      error={error}
+                      ref={editorRef}
+                    />
+                  </div>
+                )}
+
+                {paneId === "viewport" && (
+                  <div className="flex-1 min-h-0 flex flex-col">
+                    <div className="flex-1 min-h-0">
+                      <Viewport3D
+                        geometry={geometry}
+                        isGenerating={isGenerating}
+                        ref={viewportRef}
+                      />
+                    </div>
+
+                    {showGeometryInfo && (
+                      <div className="border-t border-border p-4 max-h-80 overflow-y-auto">
+                        <GeometryInfo geometry={geometry} />
+                      </div>
+                    )}
+
+                    {parameterDefs.length > 0 && (
+                      <div className="border-t border-border p-4 max-h-48 overflow-y-auto">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-medium flex items-center gap-2">
+                            <Code className="w-4 h-4" />
+                            Parameters
+                          </h3>
+                          <button
+                            onClick={handleResetParameters}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            title="Reset to defaults"
+                          >
+                            Reset
+                          </button>
+                        </div>
+                        <ParameterSliders
+                          parameters={parameterDefs}
+                          values={parameters}
+                          onChange={handleParameterChange}
+                          onReset={handleResetParameter}
+                          ref={parametersRef}
+                        />
+                      </div>
+                    )}
+
+                    {showVersions && versions && (
+                      <div className="border-t border-border p-4 max-h-64 overflow-y-auto">
+                        <VersionHistory
+                          versions={versions}
+                          currentVersionId={currentVersionId}
+                          onLoadVersion={handleLoadVersion}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {index < visiblePaneIds.length - 1 && (
+                <div
+                  className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
+                  onMouseDown={(event) => handleSplitterMouseDown(paneId, visiblePaneIds[index + 1], event)}
+                />
+              )}
             </div>
-          )}
-        </div>
+          );
+        })}
       </div>
 
       <ExportDialog
