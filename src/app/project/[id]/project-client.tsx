@@ -444,6 +444,22 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     }
   }, [geometryCount, showChat]);
 
+  const requestViewportSnapshot = useCallback(() => {
+    if (!viewportRef.current?.captureImage || geometryCount === 0) {
+      return null;
+    }
+    try {
+      const url = viewportRef.current.captureImage();
+      if (!url) return null;
+      return {
+        url,
+        altText: "Current 3D viewport state",
+      };
+    } catch {
+      return null;
+    }
+  }, [geometryCount]);
+
   const handleResetLayout = useCallback(() => {
     setPaneOrder(DEFAULT_PANE_ORDER);
     setPaneRatios(DEFAULT_PANE_RATIOS);
@@ -992,6 +1008,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             onCodeChange={handleCodeChange}
             onPromptComplete={handlePromptComplete}
             inputRef={chatInputRef}
+            requestViewportSnapshot={requestViewportSnapshot}
             ownerId={userId}
             headerDraggable={visiblePaneIds.length > 1}
             onHeaderDragStart={(event) => handlePaneDragStart("chat", event)}

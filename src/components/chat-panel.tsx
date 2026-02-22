@@ -98,6 +98,7 @@ interface ChatPanelProps {
   onCodeChange: (code: string) => void;
   onPromptComplete?: () => void;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
+  requestViewportSnapshot?: () => { url: string; altText?: string } | null;
   ownerId: string;
   headerDraggable?: boolean;
   onHeaderDragStart?: (event: DragEvent<HTMLDivElement>) => void;
@@ -157,6 +158,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     onCodeChange,
     onPromptComplete,
     inputRef: externalInputRef,
+    requestViewportSnapshot,
     ownerId,
     headerDraggable = false,
     onHeaderDragStart,
@@ -351,6 +353,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
 
     try {
       const settings = getOpenRouterSettings();
+      const viewportSnapshot = requestViewportSnapshot?.() ?? undefined;
 
       const response = await fetch("/api/codegen/stream", {
         method: "POST",
@@ -358,6 +361,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         body: JSON.stringify({
           prompt,
           promptImages,
+          viewportSnapshot,
           currentCode,
           openRouterApiKey: settings.apiKey.trim(),
           model: settings.model,
@@ -536,7 +540,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       setLiveAssistantMessage("");
       onPromptComplete?.();
     }
-  }, [currentCode, onAddMessage, onCodeUpdate, onPromptComplete]);
+  }, [currentCode, onAddMessage, onCodeUpdate, onPromptComplete, requestViewportSnapshot]);
 
   useEffect(() => {
     if (!queueState) return;

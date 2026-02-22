@@ -14,6 +14,12 @@ export const generateInputSchema = z.object({
       })
     )
     .optional(),
+  viewportSnapshot: z
+    .object({
+      url: z.string(),
+      altText: z.string().optional(),
+    })
+    .optional(),
   currentCode: z.string().optional(),
   projectContext: z
     .object({
@@ -31,7 +37,7 @@ export type GenerateInput = z.infer<typeof generateInputSchema>;
 
 /**
  * AI code generation router — handles OpenRouter API calls
- * and the 14-tool agent system for JSCAD vibecoding.
+ * and the 15-tool agent system for JSCAD vibecoding.
  */
 export const codegenRouter = router({
   /**
@@ -134,6 +140,17 @@ function buildUserPromptContent(
   return parts;
 }
 
+function isSupportedImageUrl(url: string) {
+  return /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(url) || /^https?:\/\//i.test(url);
+}
+
+interface ToolRuntimeContext {
+  viewportSnapshot?: {
+    url: string;
+    altText: string;
+  };
+}
+
 function parseModelSpec(model: string) {
   const match = model.match(/\|reasoning=(low|high)$/);
   if (!match) {
@@ -206,6 +223,7 @@ export async function runCodegen(
   const {
     prompt,
     promptImages,
+    viewportSnapshot,
     currentCode,
     projectContext,
     openRouterApiKey,
@@ -233,6 +251,13 @@ export async function runCodegen(
   ];
 
   const toolResults: ToolCallRecord[] = [];
+  const runtimeContext: ToolRuntimeContext = {};
+  if (viewportSnapshot?.url && isSupportedImageUrl(viewportSnapshot.url.trim())) {
+    runtimeContext.viewportSnapshot = {
+      url: viewportSnapshot.url.trim(),
+      altText: viewportSnapshot.altText?.trim() || "Current viewport snapshot",
+    };
+  }
   let finalCode = currentCode || "";
   let iterations = 0;
   let pendingRuntimeError: string | null = null;
@@ -332,7 +357,7 @@ export async function runCodegen(
         continue;
       }
 
-      const result = executeToolCall(toolCall.function.name, args, finalCode);
+      const result = executeToolCall(toolCall.function.name, args, finalCode, runtimeContext);
 
       if (result.updatedCode !== undefined) {
         finalCode = result.updatedCode;
@@ -386,11 +411,36 @@ export async function runCodegen(
         result: toolOutput,
       });
 
-      messages.push({
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: JSON.stringify(toolOutput),
-      });
+      const shouldAttachViewportImage =
+        toolCall.function.name === "get_viewport_snapshot" &&
+        !!runtimeContext.viewportSnapshot &&
+        !!toolOutput &&
+        typeof toolOutput === "object" &&
+        (toolOutput as { success?: boolean }).success === true;
+
+      if (shouldAttachViewportImage) {
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: [
+            { type: "text", text: JSON.stringify(toolOutput) },
+            {
+              type: "image_url",
+              image_url: { url: runtimeContext.viewportSnapshot!.url },
+            },
+            {
+              type: "text",
+              text: `Image note: ${runtimeContext.viewportSnapshot!.altText}`,
+            },
+          ],
+        });
+      } else {
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(toolOutput),
+        });
+      }
     }
 
     const lastToolNames = (assistantMessage.tool_calls || []).map(
@@ -668,6 +718,19 @@ async function callOpenRouterStream(
 
 function buildToolDefinitions() {
   return [
+    {
+      type: "function",
+      function: {
+        name: "get_viewport_snapshot",
+        description:
+          "Get the latest project viewport snapshot as an image attachment for visual inspection.",
+        parameters: {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        },
+      },
+    },
     {
       type: "function",
       function: {
@@ -1317,6 +1380,7 @@ module.exports = { main, getParameterDefinitions }
 11. Use position_relative for placing geometries relative to each other - PREFER this over manual translate() calculations
 12. Use check_alignment to verify proper gear/rack meshing before finalizing code
 13. Use check_animation_intersections to diagnose gear/rack phase drift and intersection risk across progress
+14. Use get_viewport_snapshot when visual verification of the current rendered model would help
 
 ## Relative Positioning (IMPORTANT - Use Tools, Not Manual Calculations)
 
@@ -1541,9 +1605,32 @@ module.exports = { main, getParameterDefinitions }
 function executeToolCall(
   toolName: string,
   args: Record<string, unknown>,
-  currentCode: string
+  currentCode: string,
+  context?: ToolRuntimeContext
 ): ToolResult {
   switch (toolName) {
+    case "get_viewport_snapshot": {
+      const snapshot = context?.viewportSnapshot;
+      if (!snapshot) {
+        return {
+          output: {
+            success: false,
+            error: "No viewport snapshot is available in this request. Ask the user to capture or provide one.",
+          },
+        };
+      }
+
+      return {
+        output: {
+          success: true,
+          source: "viewport",
+          mimeType: "image/png",
+          note: "Viewport snapshot attached as an image for this tool response.",
+          altText: snapshot.altText,
+        },
+      };
+    }
+
     case "write_code":
       {
         const code = args.code as string;

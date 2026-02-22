@@ -38,6 +38,7 @@
   - dropping one pane above/below another now prefers a side stack layout over collapsing into 3 horizontal rows
   - when dropping viewport onto code (top/bottom), chat stays as the single pane on the opposite side and code+viewport stack vertically
 - Tuned chat input padding with image attachments so adding an image only increases input bottom space slightly (roughly thumbnail height) instead of causing a large jump.
+- Added a codegen tool `get_viewport_snapshot` so the agent can request the current 3D viewport image during a run; tool responses now attach the snapshot as multimodal image content when available.
 
 ## Notes
 - Metadata changes are additive and do not change existing `getModel()` behavior.
