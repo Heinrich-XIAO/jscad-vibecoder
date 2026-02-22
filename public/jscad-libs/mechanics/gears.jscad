@@ -150,7 +150,7 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 	this.outsideRadius				= this.outsideDiameter / 2.0;
 	this.rootDiameter				= this.pitchDiameter - 2*this.dedendum;
 	this.rootRadius					= this.rootDiameter / 2.0;
-	this.initialPhaseOffsetDegrees	= -360 / (4 * this.teethNumber);
+	this.initialPhaseOffsetDegrees	= -360 / (2 * this.teethNumber);
 	this.initialPhaseOffsetRadians	= this.initialPhaseOffsetDegrees * Math.PI / 180;
 	this.initialTangentialOffsetAtPitch	= this.pitchRadius * this.initialPhaseOffsetRadians;
 
@@ -248,7 +248,7 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 			);
 			this.thickness = this.thickness*2;
 		}
-		return result;
+		return result.rotateZ(this.initialPhaseOffsetDegrees);
 	};
 }
 
