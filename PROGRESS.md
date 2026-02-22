@@ -28,6 +28,7 @@
   - apply recommended phase correction
   - rerun until no phase misalignment remains
 - Added tests for metadata exposure and animation diagnostic tool wiring.
+- Gear library now defaults to zero initial phase offset for straight alignment.
 
 ## Notes
 - Metadata changes are additive and do not change existing `getModel()` behavior.

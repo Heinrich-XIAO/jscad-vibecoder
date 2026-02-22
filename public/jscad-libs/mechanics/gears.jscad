@@ -150,9 +150,9 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 	this.outsideRadius				= this.outsideDiameter / 2.0;
 	this.rootDiameter				= this.pitchDiameter - 2*this.dedendum;
 	this.rootRadius					= this.rootDiameter / 2.0;
-	this.initialPhaseOffsetDegrees	= -360 / (2 * this.teethNumber);
-	this.initialPhaseOffsetRadians	= this.initialPhaseOffsetDegrees * Math.PI / 180;
-	this.initialTangentialOffsetAtPitch	= this.pitchRadius * this.initialPhaseOffsetRadians;
+	this.initialPhaseOffsetDegrees	= 0;
+	this.initialPhaseOffsetRadians	= 0;
+	this.initialTangentialOffsetAtPitch	= 0;
 
 	this.getPitchFeatures = function() {
 		return {
@@ -190,10 +190,10 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 			initialToothPhaseOffsetDegrees: this.initialPhaseOffsetDegrees,
 			initialToothPhaseOffsetRadians: this.initialPhaseOffsetRadians,
 			initialTangentialOffsetAtPitch: this.initialTangentialOffsetAtPitch,
-			recommendedRackShiftAtStart: this.circularPitch / 4.0,
+			recommendedRackShiftAtStart: 0,
 			recommendedRackShiftAtStartUnits: 'mm',
-			recommendedRackShiftAtStartPitchFraction: 0.25,
-			description: 'Gear output is rotated by -360/(4*teeth) so rack-centered animations usually need +circularPitch/4 shift at progress=0.'
+			recommendedRackShiftAtStartPitchFraction: 0,
+			description: 'Gear output now starts with zero phase offset; racks align without additional shift at progress=0.'
 		};
 	};
 	
