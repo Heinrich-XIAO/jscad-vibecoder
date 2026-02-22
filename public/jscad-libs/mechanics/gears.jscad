@@ -150,8 +150,11 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 	this.outsideRadius				= this.outsideDiameter / 2.0;
 	this.rootDiameter				= this.pitchDiameter - 2*this.dedendum;
 	this.rootRadius					= this.rootDiameter / 2.0;
-	this.toothAngularThicknessAtPitch = this.circularToothThickness / this.pitchRadius;
-	this.initialPhaseOffsetRadians	= -this.toothAngularThicknessAtPitch / 2.0;
+	this.tangentAtPitchCircle	= Math.sqrt(this.pitchRadius*this.pitchRadius - this.baseCircleRadius*this.baseCircleRadius);
+	this.angleAtPitchCircle		= this.tangentAtPitchCircle / this.baseCircleRadius;
+	this.angularDifference		= this.angleAtPitchCircle - Math.atan(this.angleAtPitchCircle);
+	this.angularToothWidthBase	= Math.PI / this.teethNumber + 2 * this.angularDifference;
+	this.initialPhaseOffsetRadians	= -this.angularToothWidthBase / 2.0;
 	this.initialPhaseOffsetDegrees	= this.initialPhaseOffsetRadians * 180 / Math.PI;
 	this.initialTangentialOffsetAtPitch	= this.pitchRadius * this.initialPhaseOffsetRadians;
 
@@ -191,10 +194,10 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 			initialToothPhaseOffsetDegrees: this.initialPhaseOffsetDegrees,
 			initialToothPhaseOffsetRadians: this.initialPhaseOffsetRadians,
 			initialTangentialOffsetAtPitch: this.initialTangentialOffsetAtPitch,
-			recommendedRackShiftAtStart: this.circularToothThickness / 2.0,
+			recommendedRackShiftAtStart: Math.abs(this.initialTangentialOffsetAtPitch),
 			recommendedRackShiftAtStartUnits: 'mm',
-			recommendedRackShiftAtStartPitchFraction: (this.circularToothThickness / 2.0) / this.circularPitch,
-			description: 'Gear output rotates by half the tooth thickness (solid portion only), so racks usually need +half-tooth shift at progress=0.'
+			recommendedRackShiftAtStartPitchFraction: Math.abs(this.initialTangentialOffsetAtPitch) / this.circularPitch,
+			description: 'Gear output rotates by half the involute tooth thickness (solid portion only), so racks usually need +half-tooth shift at progress=0.'
 		};
 	};
 	
@@ -207,10 +210,7 @@ window.jscad.tspi.involuteGear = function(printer, params) {
 		}
 		
 		var angle;
-		var tangentAtPitchCircle = Math.sqrt(this.pitchRadius*this.pitchRadius - this.baseCircleRadius*this.baseCircleRadius);
-		var angleAtPitchCircle = tangentAtPitchCircle / this.baseCircleRadius;
-		var angularDifference = angleAtPitchCircle - Math.atan(angleAtPitchCircle);
-		var angularToothWidthBase = Math.PI / this.teethNumber + 2 * angularDifference;
+		var angularToothWidthBase = this.angularToothWidthBase;
 
 		var toothPolygon = createSingleToothPolygon(maxAngle, this.baseCircleRadius, angularToothWidthBase, this.resolution);
 		var singleTooth;
