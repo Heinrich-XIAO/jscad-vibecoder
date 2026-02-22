@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const modeling = require("@jscad/modeling");
 
-const { primitives, booleans, transforms, extrusions, hulls, colors, geometries } =
+const { primitives, booleans, transforms, extrusions, hulls, colors, geometries, measurements } =
   modeling;
 
 const degToRad = (deg) => (deg * Math.PI) / 180;
@@ -134,11 +134,87 @@ const flatten = (items) =>
 
 const normalizeBooleanArgs = (items) => flatten(items).filter(Boolean);
 
+const EPSILON = 1e-6;
+
+const getBoundingBox = (geometry) => {
+  try {
+    const bbox = measurements.measureBoundingBox(geometry);
+    if (!bbox || !bbox[0] || !bbox[1]) return null;
+    return bbox;
+  } catch {
+    return null;
+  }
+};
+
+const isUnionLikeBounds = (candidate, inputs) => {
+  const candidateBox = getBoundingBox(candidate);
+  if (!candidateBox) return false;
+  const inputBoxes = inputs.map(getBoundingBox);
+  if (inputBoxes.some((box) => !box)) return false;
+
+  for (let axis = 0; axis < 3; axis += 1) {
+    const expectedMin = Math.min(...inputBoxes.map((box) => box[0][axis]));
+    const expectedMax = Math.max(...inputBoxes.map((box) => box[1][axis]));
+    if (candidateBox[0][axis] > expectedMin + EPSILON) return false;
+    if (candidateBox[1][axis] < expectedMax - EPSILON) return false;
+  }
+  return true;
+};
+
+const isIntersectionLikeBounds = (candidate, inputs) => {
+  const candidateBox = getBoundingBox(candidate);
+  if (!candidateBox) return false;
+  const inputBoxes = inputs.map(getBoundingBox);
+  if (inputBoxes.some((box) => !box)) return false;
+
+  for (let axis = 0; axis < 3; axis += 1) {
+    const minAllowed = Math.max(...inputBoxes.map((box) => box[0][axis]));
+    const maxAllowed = Math.min(...inputBoxes.map((box) => box[1][axis]));
+    if (candidateBox[0][axis] < minAllowed - EPSILON) return false;
+    if (candidateBox[1][axis] > maxAllowed + EPSILON) return false;
+  }
+  return true;
+};
+
+const safeUnionTwo = (left, right) => {
+  const unionResult = booleans.union(left, right);
+  if (isUnionLikeBounds(unionResult, [left, right])) return unionResult;
+
+  const intersectResult = booleans.intersect(left, right);
+  if (isUnionLikeBounds(intersectResult, [left, right])) return intersectResult;
+
+  return unionResult;
+};
+
+const safeIntersectTwo = (left, right) => {
+  const intersectResult = booleans.intersect(left, right);
+  if (isIntersectionLikeBounds(intersectResult, [left, right])) return intersectResult;
+
+  const unionResult = booleans.union(left, right);
+  if (isIntersectionLikeBounds(unionResult, [left, right])) return unionResult;
+
+  return intersectResult;
+};
+
+const safeUnion = (...inputGeometries) => {
+  const normalized = normalizeBooleanArgs(inputGeometries);
+  if (normalized.length === 0) return geometries.geom3.create();
+  if (normalized.length === 1) return normalized[0];
+  return normalized.slice(1).reduce((acc, geometry) => safeUnionTwo(acc, geometry), normalized[0]);
+};
+
+const safeIntersect = (...inputGeometries) => {
+  const normalized = normalizeBooleanArgs(inputGeometries);
+  if (normalized.length === 0) return geometries.geom3.create();
+  if (normalized.length === 1) return normalized[0];
+  return normalized.slice(1).reduce((acc, geometry) => safeIntersectTwo(acc, geometry), normalized[0]);
+};
+
 const booleansCompat = {
   ...booleans,
-  union: (...geometries) => booleans.union(...normalizeBooleanArgs(geometries)),
+  union: (...geometries) => safeUnion(...geometries),
   subtract: (base, ...cuts) => booleans.subtract(base, ...normalizeBooleanArgs(cuts)),
-  intersect: (...geometries) => booleans.intersect(...normalizeBooleanArgs(geometries)),
+  intersect: (...geometries) => safeIntersect(...geometries),
 };
 
 const union = (...geometries) => wrap(booleansCompat.union(...geometries));
