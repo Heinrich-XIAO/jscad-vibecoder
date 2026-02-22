@@ -57,7 +57,7 @@ export const create = mutation({
     let initialCode = `const { cuboid } = require('@jscad/modeling').primitives
 
 const main = () => {
-  return cuboid({ size: [20, 20, 20] })
+  return [cuboid({ size: [20, 20, 20] })]
 }
 
 module.exports = { main }

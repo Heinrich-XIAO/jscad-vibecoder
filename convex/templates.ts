@@ -58,7 +58,7 @@ const getParameterDefinitions = () => [
 
 const main = (params) => {
   const { width = 30, depth = 20, height = 15 } = params || {}
-  return cuboid({ size: [width, depth, height] })
+  return [cuboid({ size: [width, depth, height] })]
 }
 
 module.exports = { main, getParameterDefinitions }`,
@@ -83,7 +83,7 @@ const getParameterDefinitions = () => [
 
 const main = (params) => {
   const { width = 50, depth = 30, height = 20, roundRadius = 2 } = params || {}
-  return roundedCuboid({ size: [width, depth, height], roundRadius })
+  return [roundedCuboid({ size: [width, depth, height], roundRadius })]
 }
 
 module.exports = { main, getParameterDefinitions }`,
@@ -125,7 +125,7 @@ const main = (params) => {
     cylinder({ radius: holeRadius, height: thickness + 1 })
   )
   
-  return subtract(bracket, hole1, hole2)
+  return [subtract(bracket, hole1, hole2)]
 }
 
 module.exports = { main, getParameterDefinitions }`,
