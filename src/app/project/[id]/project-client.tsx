@@ -1295,7 +1295,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
                   className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
                   onMouseDown={startStackPrimaryResize}
                 />
-                <div className="flex-1 min-h-0 flex flex-col">
+                <div style={{ flexBasis: 0, flexGrow: 1 - stackPrimaryRatio, flexShrink: 1 }} className="min-h-0 flex flex-col">
                   {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 }, "border-l")}
                   <div
                     className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
@@ -1311,7 +1311,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             const [topPane, bottomPane, rightPane] = ordered;
             return (
               <div className="flex-1 min-h-0 flex">
-                <div className="flex-1 min-h-0 flex flex-col">
+                <div style={{ flexBasis: 0, flexGrow: stackPrimaryRatio, flexShrink: 1 }} className="min-h-0 flex flex-col">
                   {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 }, "border-l")}
                   <div
                     className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
