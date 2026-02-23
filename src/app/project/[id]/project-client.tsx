@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
-import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Box, Camera, RotateCcw } from "lucide-react";
+import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Box, Camera, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { ChatPanel, type ChatPanelHandle } from "@/components/chat-panel";
 import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
 import { Viewport3D, type Viewport3DHandle } from "@/components/viewport-3d";
@@ -1102,50 +1102,54 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               <h2 className="text-sm font-medium text-foreground">3D Viewer</h2>
             </div>
 
-            <div className="flex-1 min-h-0 relative">
-              <button
-                onClick={handleInsertViewportSnapshot}
-                disabled={isSnapshotting || geometryCount === 0 || isGenerating}
-                className="absolute top-2 right-2 z-10 p-2 rounded-md bg-background/90 border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                title={geometryCount === 0 ? "Run code to capture a model snapshot" : "Insert the current view into your next prompt"}
-              >
-                <Camera className="w-4 h-4" />
-              </button>
-              <Viewport3D
-                geometry={geometry}
-                isGenerating={isGenerating}
-                ref={viewportRef}
-              />
+            <div className="flex-1 min-h-0 flex">
+              <div className="flex-1 min-h-0 relative">
+                <button
+                  onClick={handleInsertViewportSnapshot}
+                  disabled={isSnapshotting || geometryCount === 0 || isGenerating}
+                  className="absolute top-2 left-2 z-10 p-2 rounded-md bg-background/90 border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title={geometryCount === 0 ? "Run code to capture a model snapshot" : "Insert the current view into your next prompt"}
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+                <Viewport3D
+                  geometry={geometry}
+                  isGenerating={isGenerating}
+                  ref={viewportRef}
+                />
+              </div>
+
+              {parameterDefs.length > 0 && (
+                <div className="w-56 border-l border-border flex flex-col">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+                    <h3 className="text-sm font-medium flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4" />
+                      Parameters
+                    </h3>
+                    <button
+                      onClick={handleResetParameters}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      title="Reset to defaults"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-3">
+                    <ParameterSliders
+                      parameters={parameterDefs}
+                      values={parameters}
+                      onChange={handleParameterChange}
+                      onReset={handleResetParameter}
+                      ref={parametersRef}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {showGeometryInfo && (
               <div className="border-t border-border p-4 max-h-80 overflow-y-auto">
                 <GeometryInfo geometry={geometry} />
-              </div>
-            )}
-
-            {parameterDefs.length > 0 && (
-              <div className="border-t border-border p-4 max-h-48 overflow-y-auto">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium flex items-center gap-2">
-                    <Code className="w-4 h-4" />
-                    Parameters
-                  </h3>
-                  <button
-                    onClick={handleResetParameters}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    title="Reset to defaults"
-                  >
-                    Reset
-                  </button>
-                </div>
-                <ParameterSliders
-                  parameters={parameterDefs}
-                  values={parameters}
-                  onChange={handleParameterChange}
-                  onReset={handleResetParameter}
-                  ref={parametersRef}
-                />
               </div>
             )}
 
