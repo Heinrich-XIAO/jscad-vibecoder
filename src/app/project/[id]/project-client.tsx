@@ -1099,7 +1099,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               onDragEnd={clearPaneDrag}
             >
               <Box className="w-4 h-4 text-cyan-500" />
-              <h2 className="text-sm font-medium text-foreground">Viewport</h2>
+              <h2 className="text-sm font-medium text-foreground">3D Viewer</h2>
             </div>
 
             <div className="flex-1 min-h-0 relative">

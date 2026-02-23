@@ -163,7 +163,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         onDragEnd={onHeaderDragEnd}
       >
         <Code2 className="w-4 h-4 text-emerald-500" />
-        <h2 className="text-sm font-medium text-foreground">JSCAD Code</h2>
+        <h2 className="text-sm font-medium text-foreground">Code</h2>
         {readOnly && (
           <span className="text-xs text-muted-foreground ml-auto">Read Only</span>
         )}
