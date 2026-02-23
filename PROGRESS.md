@@ -1,6 +1,7 @@
 # Project Progress
 
 ## Completed
+- Fixed pane resizing in stack layouts (leftStack/rightStack) by using correct flex ratios for stack containers instead of flex-1.
 - Added persistent chat prompt queue with FIFO processing:
   - users can submit new prompts while an agent run is in progress
   - prompts are stored in Convex and processed sequentially after current run
