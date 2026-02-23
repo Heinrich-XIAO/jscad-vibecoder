@@ -10,13 +10,6 @@
 ## Subagent Policy
 * If you are Opus 4.5 or another Anthropic model, do not spin up subagents since that would cost a lot of money.
 
-## Project Status
-* **ALWAYS read [PROGRESS.md](./PROGRESS.md) first** before starting work
-* Check what features are completed vs remaining
-* Understand the current tech stack and architecture
-* Review known issues and next steps
-* Update PROGRESS.md when completing features
-
 ## System Prompt
 * The project system prompt lives in `src/server/routers/codegen.ts` inside `buildSystemPrompt(...)`.
 
