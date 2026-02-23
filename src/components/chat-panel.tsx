@@ -25,6 +25,7 @@ interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string;
+  images?: Array<{ url: string; altText?: string }>;
   toolCalls?: Array<{
     toolName: string;
     args: Record<string, unknown>;
@@ -328,13 +329,13 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       }
 
       const pendingId = `${PENDING_MESSAGE_PREFIX}${Math.random().toString(36).slice(2)}`;
-      const imageSummary = promptImages.length > 0 ? `\n\n[${promptImages.length} image attachment${promptImages.length === 1 ? "" : "s"}]` : "";
       setPendingMessages((prev) => [
         ...prev,
         {
           id: pendingId,
           role: "user",
-          content: `${prompt}${imageSummary}`,
+          content: prompt,
+          images: promptImages.length > 0 ? promptImages : undefined,
           pendingStatus: "sending",
         },
       ]);
@@ -925,6 +926,18 @@ function MessageBubble({
         <div
           className={`text-sm ${config.textColor} prose prose-sm dark:prose-invert max-w-none break-words [&>p]:mb-2 [&>p:last-child]:mb-0 [&>pre]:bg-black/50 [&>pre]:p-2 [&>pre]:rounded-md`}
         >
+          {message.images && message.images.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {message.images.map((img, idx) => (
+                <img
+                  key={idx}
+                  src={img.url}
+                  alt={img.altText || "Attached image"}
+                  className="max-w-[200px] max-h-[150px] rounded-md border border-border object-cover"
+                />
+              ))}
+            </div>
+          )}
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {message.content}
           </ReactMarkdown>
