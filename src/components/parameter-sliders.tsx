@@ -79,7 +79,7 @@ function ParameterControl({
   if (parameter.type === "number") {
     return (
       <div className="flex items-center gap-2">
-        <label className="text-xs text-muted-foreground min-w-[80px] truncate">
+        <label className="text-xs text-muted-foreground min-w-[60px] truncate">
           {parameter.label}
         </label>
         <input
@@ -98,7 +98,7 @@ function ParameterControl({
           max={parameter.max}
           step={parameter.step}
           onChange={(e) => handleChange(parseFloat(e.target.value))}
-          className="w-14 bg-background border border-input rounded px-2 py-1 text-xs text-foreground text-right"
+          className="w-12 bg-background border border-input rounded px-1 py-1 text-xs text-foreground text-right"
         />
         {onReset && !isDefault && (
           <button
@@ -116,7 +116,7 @@ function ParameterControl({
   if (parameter.type === "boolean") {
     return (
       <div className="flex items-center gap-2">
-        <label className="text-xs text-muted-foreground min-w-[80px] truncate">
+        <label className="text-xs text-muted-foreground min-w-[60px] truncate">
           {parameter.label}
         </label>
         <input
@@ -141,7 +141,7 @@ function ParameterControl({
   if (parameter.type === "text") {
     return (
       <div className="flex items-center gap-2">
-        <label className="text-xs text-muted-foreground min-w-[80px] truncate">
+        <label className="text-xs text-muted-foreground min-w-[60px] truncate">
           {parameter.label}
         </label>
         <input

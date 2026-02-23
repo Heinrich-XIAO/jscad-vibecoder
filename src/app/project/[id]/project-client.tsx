@@ -1128,7 +1128,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               </div>
 
               {parameterDefs.length > 0 && (
-                <div className="w-56 border-l border-border flex flex-col">
+                <div className="w-72 min-w-[240px] border-l border-border flex flex-col">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                     <h3 className="text-sm font-medium flex items-center gap-2">
                       <SlidersHorizontal className="w-4 h-4" />
