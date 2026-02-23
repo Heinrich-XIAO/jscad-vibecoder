@@ -1215,7 +1215,7 @@ function buildToolDefinitions() {
             },
             useLibraryPhaseCompensation: {
               type: "boolean",
-              description: "Use +circularPitch/4 default compensation for bundled gear library phase offset.",
+              description: "Legacy flag (default false). The gear and rack libraries now mesh directly without phase compensation.",
             },
             gearCenterAxisPosition: {
               type: "number",
@@ -1392,6 +1392,13 @@ When working with gears, racks, or other mechanical elements that mesh together:
 - For rack meshes in the provided mechanics library, use **pitchAxis="y"** unless the rack is explicitly oriented differently
 
 Manual positioning calculations for gears/racks are error-prone and will result in incorrect meshing. The tools calculate correct center distances based on pitch geometry.
+
+### Gear-Rack Phase Alignment (Library Design)
+The provided gear and rack libraries are designed to mesh directly at their reference positions without any additional phase shift:
+- **Gear**: The library applies an initial phase offset so a VALLEY (not a tooth) is centered at angle 0 (the Y-axis).
+- **Rack**: Teeth are placed starting at x = circularPitch/2, so there is a VALLEY (not a tooth) at x = 0.
+- **Result**: When a gear is positioned above a rack with the gear at angle 0 and rack at x=0, the gear's tooth will naturally mesh with the rack's valley at the origin.
+- **DO NOT** apply a circularPitch/4 phase shift - this is incorrect for these libraries and will cause misalignment.
 
 ### Positioning Geometries Relative to Each Other
 Instead of manually calculating translate([x,y,z]) coordinates, use the position_relative tool:
@@ -1729,10 +1736,10 @@ function executeToolCall(
         };
         output.phaseMetadata = {
           gearLibraryInitialToothPhaseOffsetDegrees: -360 / (4 * gearParams.teeth),
-          recommendedRackShiftAtStartMm: circularPitch / 4,
-          recommendedRackShiftAtStartPitchFraction: 0.25,
+          recommendedRackShiftAtStartMm: 0,
+          recommendedRackShiftAtStartPitchFraction: 0,
           description:
-            "Bundled gear helper applies quarter-tooth initial phase shift. Rack-centered animations usually need +circularPitch/4 at progress=0.",
+            "Both gear and rack libraries are designed to mesh directly at their reference positions (gear: valley at angle 0, rack: valley at x=0). No additional phase shift needed.",
         };
         features.push({
           type: "pitch_circle",
@@ -2152,7 +2159,7 @@ function executeToolCall(
         rackTranslationMmPerProgress - expectedTranslationMmPerProgress;
 
       const expectedLibraryPhaseShiftMm = useLibraryPhaseCompensation
-        ? circularPitch / 4
+        ? 0
         : 0;
       const expectedRackXAtProgress0 = centeredStart
         ? expectedLibraryPhaseShiftMm + userPhaseShiftMm
