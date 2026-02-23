@@ -1047,7 +1047,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     return (
       <div
         key={paneId}
-        className={`relative min-w-0 min-h-0 flex flex-col bg-card border-border ${isActive ? "ring-1 ring-primary/30" : ""} ${extraClassName ?? ""}`}
+        className={`relative min-w-0 min-h-0 flex flex-col bg-card border border-border rounded-lg overflow-hidden ${isActive ? "ring-2 ring-primary" : ""} ${extraClassName ?? ""}`}
         style={style}
         onClick={() => setActivePane(paneId)}
         onDragOver={(event) => handlePaneDragOver(event, paneId)}
@@ -1261,7 +1261,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
       <div
         ref={layoutRef}
-        className={`flex-1 flex overflow-hidden ${isResizing ? "select-none" : ""}`}
+        className={`flex-1 flex overflow-hidden p-1.5 gap-1.5 ${isResizing ? "select-none" : ""}`}
         onDragOverCapture={handleRootDragOverCapture}
         onDropCapture={handleRootDropCapture}
       >
@@ -1269,7 +1269,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
           const ordered = visiblePaneIds;
 
           if (ordered.length <= 1) {
-            return renderPane(ordered[0], { flex: 1 }, "border-l");
+            return renderPane(ordered[0], { flex: 1 });
           }
 
           if (layoutMode === "rows") {
@@ -1277,7 +1277,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               <div className="flex-1 min-h-0 flex flex-col">
                 {ordered.map((paneId, index) => (
                   <div key={paneId} className="contents">
-                    {renderPane(paneId, { flexBasis: 0, flexGrow: visiblePaneRatios[paneId], flexShrink: 1 }, "border-l")}
+                    {renderPane(paneId, { flexBasis: 0, flexGrow: visiblePaneRatios[paneId], flexShrink: 1 })}
                     {index < ordered.length - 1 && (
                       <div
                         className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
@@ -1294,18 +1294,18 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             const [leftPane, topPane, bottomPane] = ordered;
             return (
               <div className="flex-1 min-h-0 flex">
-                {renderPane(leftPane, { flexBasis: 0, flexGrow: stackPrimaryRatio, flexShrink: 1 }, "border-l")}
+                {renderPane(leftPane, { flexBasis: 0, flexGrow: stackPrimaryRatio, flexShrink: 1 })}
                 <div
                   className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
                   onMouseDown={startStackPrimaryResize}
                 />
                 <div style={{ flexBasis: 0, flexGrow: 1 - stackPrimaryRatio, flexShrink: 1 }} className="min-h-0 flex flex-col">
-                  {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 }, "border-l")}
+                  {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 })}
                   <div
                     className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
                     onMouseDown={(event) => startStackSecondaryResize(topPane, bottomPane, event)}
                   />
-                  {renderPane(bottomPane, { flexBasis: 0, flexGrow: 1 - stackSecondaryRatio, flexShrink: 1 }, "border-l")}
+                  {renderPane(bottomPane, { flexBasis: 0, flexGrow: 1 - stackSecondaryRatio, flexShrink: 1 })}
                 </div>
               </div>
             );
@@ -1316,18 +1316,18 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             return (
               <div className="flex-1 min-h-0 flex">
                 <div style={{ flexBasis: 0, flexGrow: stackPrimaryRatio, flexShrink: 1 }} className="min-h-0 flex flex-col">
-                  {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 }, "border-l")}
+                  {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 })}
                   <div
                     className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
                     onMouseDown={(event) => startStackSecondaryResize(topPane, bottomPane, event)}
                   />
-                  {renderPane(bottomPane, { flexBasis: 0, flexGrow: 1 - stackSecondaryRatio, flexShrink: 1 }, "border-l")}
+                  {renderPane(bottomPane, { flexBasis: 0, flexGrow: 1 - stackSecondaryRatio, flexShrink: 1 })}
                 </div>
                 <div
                   className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
                   onMouseDown={startStackPrimaryResize}
                 />
-                {renderPane(rightPane, { flexBasis: 0, flexGrow: 1 - stackPrimaryRatio, flexShrink: 1 }, "border-l")}
+                {renderPane(rightPane, { flexBasis: 0, flexGrow: 1 - stackPrimaryRatio, flexShrink: 1 })}
               </div>
             );
           }
@@ -1336,7 +1336,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             <div className="flex-1 min-h-0 flex">
               {ordered.map((paneId, index) => (
                 <div key={paneId} className="contents">
-                  {renderPane(paneId, { flexBasis: 0, flexGrow: visiblePaneRatios[paneId], flexShrink: 1 }, "border-l")}
+                  {renderPane(paneId, { flexBasis: 0, flexGrow: visiblePaneRatios[paneId], flexShrink: 1 })}
                   {index < ordered.length - 1 && (
                     <div
                       className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
