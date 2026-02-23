@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next dev & bunx convex dev & wait",
+    "start:prod": "next start",
     "lint": "tsslint --project tsconfig.json"
   },
   "dependencies": {
