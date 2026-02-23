@@ -369,6 +369,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   );
 
   const onCodeUpdate = useCallback((code: string) => {
+    if (code.trim() === "") return;
     onCodeChange(code);
   }, [onCodeChange]);
 

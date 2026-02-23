@@ -185,6 +185,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const parametersRef = useRef<ParameterSlidersHandle>(null);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPersistedCodeRef = useRef("");
+  const hasLoadedInitialCodeRef = useRef(false);
   const layoutRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef<{
     axis: "x" | "y";
@@ -222,16 +223,20 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [paneRatios, visiblePaneIds]);
 
   useEffect(() => {
-    if (project && !code && project.currentVersion?.jscadCode) {
+    if (hasLoadedInitialCodeRef.current) return;
+    if (project && project.currentVersion?.jscadCode) {
       resetCode(project.currentVersion.jscadCode);
       lastPersistedCodeRef.current = project.currentVersion.jscadCode;
+      hasLoadedInitialCodeRef.current = true;
     }
-  }, [project, code, resetCode]);
+  }, [project, resetCode]);
 
   useEffect(() => {
+    if (hasLoadedInitialCodeRef.current) return;
     if (isSignedIn || code) return;
     resetCode(GUEST_STARTER_CODE);
     lastPersistedCodeRef.current = GUEST_STARTER_CODE;
+    hasLoadedInitialCodeRef.current = true;
   }, [code, isSignedIn, resetCode]);
 
   useEffect(() => {
@@ -421,6 +426,9 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [parameterDefs]);
 
   const handleCodeChange = (newCode: string) => {
+    if (newCode.trim() === "" && code.trim() !== "") {
+      return;
+    }
     setCode(newCode);
   };
 
