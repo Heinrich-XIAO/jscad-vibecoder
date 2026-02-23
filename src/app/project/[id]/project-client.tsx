@@ -1093,7 +1093,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         {paneId === "viewport" && (
           <div className="flex-1 min-h-0 flex flex-col">
             <div
-              className={`flex items-center gap-2 px-4 py-2 ${visiblePaneIds.length > 1 ? "cursor-move" : ""}`}
+              className={`flex items-center gap-2 px-4 py-2 border-b border-border ${visiblePaneIds.length > 1 ? "cursor-move" : ""}`}
               draggable={visiblePaneIds.length > 1}
               onDragStart={(event) => handlePaneDragStart("viewport", event)}
               onDragEnd={clearPaneDrag}
