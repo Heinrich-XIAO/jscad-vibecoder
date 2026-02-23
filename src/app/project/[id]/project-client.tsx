@@ -33,12 +33,12 @@ type PaneId = "chat" | "code" | "viewport";
 type LayoutMode = "columns" | "rows" | "leftStack" | "rightStack";
 type DropZone = "left" | "right" | "top" | "bottom" | "center";
 
-const DEFAULT_PANE_ORDER: PaneId[] = ["chat", "code", "viewport"];
+const DEFAULT_PANE_ORDER: PaneId[] = ["code", "viewport", "chat"];
 
 const DEFAULT_PANE_RATIOS: Record<PaneId, number> = {
-  chat: 0.2,
-  code: 0.34,
-  viewport: 0.46,
+  chat: 0.33,
+  code: 0.33,
+  viewport: 0.34,
 };
 
 const MIN_PANE_WIDTH: Record<PaneId, number> = {
@@ -169,8 +169,8 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [paneOrder, setPaneOrder] = useState<PaneId[]>(DEFAULT_PANE_ORDER);
   const [paneRatios, setPaneRatios] = useState<Record<PaneId, number>>(DEFAULT_PANE_RATIOS);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("columns");
-  const [stackPrimaryRatio, setStackPrimaryRatio] = useState(0.58);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("rightStack");
+  const [stackPrimaryRatio, setStackPrimaryRatio] = useState(0.67);
   const [stackSecondaryRatio, setStackSecondaryRatio] = useState(0.5);
   const [activePane, setActivePane] = useState<PaneId>("code");
   const [draggingPane, setDraggingPane] = useState<PaneId | null>(null);
@@ -481,8 +481,8 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const handleResetLayout = useCallback(() => {
     setPaneOrder(DEFAULT_PANE_ORDER);
     setPaneRatios(DEFAULT_PANE_RATIOS);
-    setLayoutMode("columns");
-    setStackPrimaryRatio(0.58);
+    setLayoutMode("rightStack");
+    setStackPrimaryRatio(0.67);
     setStackSecondaryRatio(0.5);
     setActivePane("code");
   }, []);
