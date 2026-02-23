@@ -91,24 +91,30 @@ function ParameterControl({
           onChange={(e) => handleChange(parseFloat(e.target.value))}
           className="flex-1 h-1 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
         />
-        <input
-          type="number"
-          value={localValue as number}
-          min={parameter.min}
-          max={parameter.max}
-          step={parameter.step}
-          onChange={(e) => handleChange(parseFloat(e.target.value))}
-          className="w-12 bg-background border border-input rounded px-1 py-1 text-xs text-foreground text-right"
-        />
-        {onReset && !isDefault && (
+        <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={onReset}
-            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-            title="Reset to default"
+            disabled={!onReset || isDefault}
+            className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
+              onReset && !isDefault
+                ? "text-muted-foreground hover:text-foreground"
+                : "text-transparent"
+            }`}
+            title={onReset && !isDefault ? "Reset to default" : undefined}
           >
             <RotateCcw className="w-3 h-3" />
           </button>
-        )}
+          <input
+            type="number"
+            value={localValue as number}
+            min={parameter.min}
+            max={parameter.max}
+            step={parameter.step}
+            onChange={(e) => handleChange(parseFloat(e.target.value))}
+            className="w-14 bg-background border border-input rounded px-1 py-1 text-xs text-foreground text-right"
+          />
+        </div>
       </div>
     );
   }

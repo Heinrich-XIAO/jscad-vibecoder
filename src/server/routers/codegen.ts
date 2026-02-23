@@ -151,12 +151,14 @@ interface ToolRuntimeContext {
   };
 }
 
-function parseModelSpec(model: string) {
+function parseModelSpec(model: string | undefined) {
+  // Always return a defined model string
+  const fallback = "google/gemini-3-flash-preview|reasoning=high";
+  if (!model) return { model: fallback, reasoning: undefined } as const;
   const match = model.match(/\|reasoning=(low|high)$/);
   if (!match) {
-    return { model, reasoning: undefined } as const;
+    return { model: model, reasoning: undefined } as const;
   }
-
   const effort = match[1] as "low" | "high";
   const baseModel = model.replace(/\|reasoning=(low|high)$/, "");
   return { model: baseModel, reasoning: { effort } } as const;
@@ -231,11 +233,13 @@ export async function runCodegen(
     maxIterations,
   } = input;
 
-  const apiKey =
+   const apiKey =
     openRouterApiKey?.trim() || process.env.OPENROUTER_API_KEY?.trim();
-  if (!apiKey) {
+  // Allow inference if SIGNED_OUT_INFERENCE is set, even without API key
+  const signedOutInference = process.env.SIGNED_OUT_INFERENCE === "1";
+  if (!apiKey && !signedOutInference) {
     throw new Error(
-      "OpenRouter API key is missing. Please configure it in Settings or on the server."
+      "OpenRouter API key is missing. Please configure it in Settings or on the server, or set SIGNED_OUT_INFERENCE=1 to allow inference when signed out."
     );
   }
 
@@ -269,7 +273,7 @@ export async function runCodegen(
 
     const response = await callOpenRouter({
       apiKey,
-      model: resolvedModel,
+        model: String(resolvedModel ?? "google/gemini-3-flash-preview|reasoning=high"),
       messages,
       tools,
       reasoning,
@@ -480,7 +484,7 @@ export async function runCodegen(
     streamedText = await callOpenRouterStream(
       {
         apiKey,
-        model: resolvedModel,
+      model: String(resolvedModel ?? "google/gemini-3-flash-preview|reasoning=high"),
         messages: messagesForFinal,
         tools,
         toolChoice: "none",
@@ -576,6 +580,7 @@ interface DiagnosticItem {
 // --- OpenRouter API ---
 
 const OPENROUTER_CHAT_URL = getOpenRouterEndpoint("/api/v1/chat/completions");
+const OPENROUTER_MAX_TOKENS = Number(process.env.OPENROUTER_MAX_TOKENS ?? "4096");
 
 async function callOpenRouter(params: {
   apiKey: string;
@@ -603,7 +608,7 @@ async function callOpenRouter(params: {
         provider: { sort: "price" },
         ...(params.reasoning ? { reasoning: params.reasoning } : {}),
         temperature: 0.3,
-        max_tokens: 4096,
+        max_tokens: OPENROUTER_MAX_TOKENS,
       }),
     }
   );
@@ -645,7 +650,7 @@ async function callOpenRouterStream(
         provider: { sort: "price" },
         ...(params.reasoning ? { reasoning: params.reasoning } : {}),
         temperature: 0.3,
-        max_tokens: 4096,
+        max_tokens: OPENROUTER_MAX_TOKENS,
         stream: true,
       }),
     }

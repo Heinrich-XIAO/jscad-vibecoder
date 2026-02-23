@@ -24,8 +24,10 @@
     "@trpc/server": "^11.10.0",
     "@types/three": "^0.182.0",
     "convex": "^1.31.7",
+    "dotenv": "^17.3.1",
     "lucide-react": "^0.564.0",
     "next": "16.1.6",
+    "node-fetch": "^3.3.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
@@ -43,6 +45,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
+    "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   },
   "ignoreScripts": [
