@@ -1,6 +1,6 @@
 "use client";
  
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { api } from "@/convex/_generated/api";
 import { useQuery, useMutation } from "convex/react";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
@@ -25,6 +25,7 @@ export default function DashboardPage() {
   const templates = useQuery(api.templates.list, isConvexConfigured ? {} : "skip");
   const createProject = useMutation(api.projects.create);
   const deleteProject = useMutation(api.projects.remove);
+  const seedTemplates = useMutation(api.templates.seed);
   const convexError = isConvexConfigured
     ? null
     : "Convex not configured. Run: npx convex dev --once --configure=new";
@@ -34,6 +35,28 @@ export default function DashboardPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [hasAttemptedTemplateSeed, setHasAttemptedTemplateSeed] = useState(false);
+  const [templateSeedError, setTemplateSeedError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isConvexConfigured) return;
+    if (templates === undefined) return;
+    if (!Array.isArray(templates) || templates.length > 0) return;
+    if (hasAttemptedTemplateSeed) return;
+
+    setHasAttemptedTemplateSeed(true);
+    setTemplateSeedError(null);
+
+    void seedTemplates({}).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : "Failed to seed templates";
+      setTemplateSeedError(message);
+    });
+  }, [
+    hasAttemptedTemplateSeed,
+    isConvexConfigured,
+    seedTemplates,
+    templates,
+  ]);
 
   const handleCreateProject = useCallback(async () => {
     if (!userId) return;
@@ -350,7 +373,7 @@ export default function DashboardPage() {
             </div>
           ) : templates.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
-              No templates available
+              {templateSeedError ? `Failed to load templates: ${templateSeedError}` : "No templates available"}
             </div>
           ) : (
             <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${showTemplates ? "" : "max-h-48 overflow-hidden"}`}>
