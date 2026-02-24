@@ -133,6 +133,81 @@ module.exports = { main, getParameterDefinitions }`,
           holeRadius: { type: "number", min: 0.5, max: 10, default: 2.1, label: "Hole Radius (mm)" },
         },
       },
+      {
+        name: "Linkage Inference Demo",
+        description:
+          "Visualizes the rack-and-pinion linkage that the new inference tool derives from paired start/end motions.",
+        category: "Mechanisms",
+        jscadCode: `const { cuboid, cylinder } = require('@jscad/modeling').primitives
+const { translate, rotateX, rotateY, rotateZ } = require('@jscad/modeling').transforms
+
+function normalizeCoords(coord) {
+  const [x = 0, y = 0, z = 0, rotX = 0, rotY = 0, rotZ = 0] = coord || []
+  return { x, y, z, rotX, rotY, rotZ }
+}
+
+function dominantLinear(motion) {
+  const initial = normalizeCoords(motion.initial)
+  const final = normalizeCoords(motion.final)
+  const deltas = {
+    x: final.x - initial.x,
+    y: final.y - initial.y,
+    z: final.z - initial.z,
+  }
+  return Object.entries(deltas).reduce(
+    (best, [axis, value]) => (Math.abs(value) > Math.abs(best.delta) ? { axis, delta: value } : best),
+    { axis: 'x', delta: deltas.x }
+  )
+}
+
+function dominantRotation(motion) {
+  const initial = normalizeCoords(motion.initial)
+  const final = normalizeCoords(motion.final)
+  const deltas = {
+    rotX: final.rotX - initial.rotX,
+    rotY: final.rotY - initial.rotY,
+    rotZ: final.rotZ - initial.rotZ,
+  }
+  return Object.entries(deltas).reduce(
+    (best, [axis, value]) => (Math.abs(value) > Math.abs(best.delta) ? { axis, delta: value } : best),
+    { axis: 'rotZ', delta: deltas.rotZ }
+  )
+}
+
+function linkage(motionA, motionB) {
+  const translation = dominantLinear(motionA)
+  const rotation = dominantRotation(motionB)
+  const radians = (rotation.delta * Math.PI) / 180
+  const pitchRadius = Math.abs(translation.delta / radians)
+  return { translation, rotation, pitchRadius }
+}
+
+function rotateByAxis(axis, angle, geometry) {
+  if (axis === 'rotX') return rotateX(angle, geometry)
+  if (axis === 'rotY') return rotateY(angle, geometry)
+  return rotateZ(angle, geometry)
+}
+
+function main() {
+  const motionA = { initial: [0, -2, 0], final: [0, 2, 0] }
+  const motionB = { initial: [10, 0, 0, 0, 0, 0], final: [10, 0, 0, 0, 0, 50] }
+  const inferred = linkage(motionA, motionB)
+
+  const rack = translate([0, -2, 0], cuboid({ size: [20, 4, 4] }))
+  const pinion = translate(
+    [10, 0, 2],
+    rotateByAxis(
+      inferred.rotation.axis,
+      (inferred.rotation.delta * Math.PI) / 180,
+      cylinder({ height: 8, radius: inferred.pitchRadius, segments: 64 })
+    )
+  )
+
+  return [rack, pinion]
+}
+
+module.exports = { main }`,
+      },
     ];
 
     const existingTemplates = await ctx.db.query("templates").collect();
