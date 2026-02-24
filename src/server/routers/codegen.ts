@@ -233,15 +233,16 @@ export async function runCodegen(
     maxIterations,
   } = input;
 
-   const apiKey =
+  const rawApiKey =
     openRouterApiKey?.trim() || process.env.OPENROUTER_API_KEY?.trim();
   // Allow inference if SIGNED_OUT_INFERENCE is set, even without API key
   const signedOutInference = process.env.SIGNED_OUT_INFERENCE === "1";
-  if (!apiKey && !signedOutInference) {
+  if (!rawApiKey && !signedOutInference) {
     throw new Error(
       "OpenRouter API key is missing. Please configure it in Settings or on the server, or set SIGNED_OUT_INFERENCE=1 to allow inference when signed out."
     );
   }
+  const apiKey = rawApiKey ?? "";
 
   const { model: resolvedModel, reasoning } = parseModelSpec(model);
 
@@ -273,7 +274,7 @@ export async function runCodegen(
 
     const response = await callOpenRouter({
       apiKey,
-        model: String(resolvedModel ?? "google/gemini-3-flash-preview|reasoning=high"),
+      model: String(resolvedModel ?? "google/gemini-3-flash-preview|reasoning=high"),
       messages,
       tools,
       reasoning,
