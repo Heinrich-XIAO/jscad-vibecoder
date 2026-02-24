@@ -199,6 +199,10 @@ self.onmessage = function(e) {
       // Create module context
       const module = { exports: {} };
       const exports = module.exports;
+
+      // Load v1 compatibility helpers by default so coord()/linkage() are
+      // available in all scripts without manual include().
+      executeExternalModule('/jscad-libs/compat/v1.js');
       
       // Create the function and execute
       const fn = new Function('require', 'module', 'exports', 'include', 'window', code);

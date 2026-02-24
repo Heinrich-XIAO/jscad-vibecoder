@@ -141,8 +141,15 @@ const toFiniteNumber = (value, fallback = 0) =>
 
 const normalizeCoord = (coord) => {
   if (Array.isArray(coord)) {
-    const [x, y, z, rotX, rotY, rotZ] = coord.map((entry) => toFiniteNumber(entry));
-    return { x, y, z, rotX, rotY, rotZ };
+    const [x = 0, y = 0, z = 0, rotX = 0, rotY = 0, rotZ = 0] = coord;
+    return {
+      x: toFiniteNumber(x),
+      y: toFiniteNumber(y),
+      z: toFiniteNumber(z),
+      rotX: toFiniteNumber(rotX),
+      rotY: toFiniteNumber(rotY),
+      rotZ: toFiniteNumber(rotZ),
+    };
   }
   if (coord && typeof coord === "object") {
     return {
@@ -173,26 +180,54 @@ const coord = (x, y, z, rotX = 0, rotY = 0, rotZ = 0) => [x, y, z, rotX, rotY, r
 
 const linkage = (motionA, motionB) => {
   const probe = (motion) => ({
-    initial: normalizeCoord(motion.initial),
-    final: normalizeCoord(motion.final),
+    initial: normalizeCoord(motion?.initial),
+    final: normalizeCoord(motion?.final),
   });
 
   const a = probe(motionA);
   const b = probe(motionB);
 
-  const linear = {
-    x: a.final.x - a.initial.x,
-    y: a.final.y - a.initial.y,
-    z: a.final.z - a.initial.z,
+  const deltasA = {
+    linear: {
+      x: a.final.x - a.initial.x,
+      y: a.final.y - a.initial.y,
+      z: a.final.z - a.initial.z,
+    },
+    angular: {
+      rotX: a.final.rotX - a.initial.rotX,
+      rotY: a.final.rotY - a.initial.rotY,
+      rotZ: a.final.rotZ - a.initial.rotZ,
+    },
   };
-  const angular = {
-    rotX: b.final.rotX - b.initial.rotX,
-    rotY: b.final.rotY - b.initial.rotY,
-    rotZ: b.final.rotZ - b.initial.rotZ,
+  const deltasB = {
+    linear: {
+      x: b.final.x - b.initial.x,
+      y: b.final.y - b.initial.y,
+      z: b.final.z - b.initial.z,
+    },
+    angular: {
+      rotX: b.final.rotX - b.initial.rotX,
+      rotY: b.final.rotY - b.initial.rotY,
+      rotZ: b.final.rotZ - b.initial.rotZ,
+    },
   };
 
-  const translation = dominantAxis(linear);
-  const rotation = dominantAxis(angular);
+  const linearA = dominantAxis(deltasA.linear);
+  const linearB = dominantAxis(deltasB.linear);
+  const angularA = dominantAxis(deltasA.angular);
+  const angularB = dominantAxis(deltasB.angular);
+
+  let translation = linearA;
+  let rotation = angularB;
+  let translationSource = "motionA";
+  let rotationSource = "motionB";
+
+  if (Math.abs(angularA.delta) > EPSILON && Math.abs(linearB.delta) > EPSILON) {
+    translation = linearB;
+    rotation = angularA;
+    translationSource = "motionB";
+    rotationSource = "motionA";
+  }
 
   const rotationRad = (rotation.delta * Math.PI) / 180 || EPSILON;
   const pitchRadius = Math.abs(translation.delta / rotationRad);
@@ -200,6 +235,10 @@ const linkage = (motionA, motionB) => {
   return {
     translation,
     rotation,
+    classification: {
+      translationSource,
+      rotationSource,
+    },
     pitchRadius,
     translationPerDegree: translation.delta / (rotation.delta || EPSILON),
     rotationPerMillimeter: rotation.delta / (translation.delta || EPSILON),
