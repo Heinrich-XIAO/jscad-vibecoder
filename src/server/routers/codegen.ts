@@ -151,6 +151,117 @@ interface ToolRuntimeContext {
   };
 }
 
+interface NormalizedPose {
+  x: number;
+  y: number;
+  z: number;
+  rotX: number;
+  rotY: number;
+  rotZ: number;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value !== "number") return null;
+  return Number.isFinite(value) ? value : null;
+}
+
+function normalizeCoordInput(
+  coord: unknown,
+  label: string
+): { ok: true; value: NormalizedPose } | { ok: false; error: string } {
+  if (Array.isArray(coord)) {
+    if (coord.length !== 3 && coord.length !== 6) {
+      return {
+        ok: false,
+        error: `${label} must be a 3-item or 6-item coordinate tuple: [x, y, z] or [x, y, z, rotX, rotY, rotZ].`,
+      };
+    }
+    const parsed = coord.map((entry) => toFiniteNumber(entry));
+    if (parsed.some((entry) => entry === null)) {
+      return {
+        ok: false,
+        error: `${label} tuple must contain only finite numbers.`,
+      };
+    }
+    const [x = 0, y = 0, z = 0, rotX = 0, rotY = 0, rotZ = 0] = parsed as number[];
+    return {
+      ok: true,
+      value: { x, y, z, rotX, rotY, rotZ },
+    };
+  }
+
+  if (coord && typeof coord === "object") {
+    const raw = coord as Record<string, unknown>;
+    const x = toFiniteNumber(raw.x) ?? 0;
+    const y = toFiniteNumber(raw.y) ?? 0;
+    const z = toFiniteNumber(raw.z) ?? 0;
+    const rotX = toFiniteNumber(raw.rotX) ?? 0;
+    const rotY = toFiniteNumber(raw.rotY) ?? 0;
+    const rotZ = toFiniteNumber(raw.rotZ) ?? 0;
+    return {
+      ok: true,
+      value: { x, y, z, rotX, rotY, rotZ },
+    };
+  }
+
+  return {
+    ok: false,
+    error: `${label} must be an object {x, y, z, rotX?, rotY?, rotZ?} or tuple [x, y, z] / [x, y, z, rotX, rotY, rotZ].`,
+  };
+}
+
+function normalizeMotionInput(
+  input: unknown,
+  label: string
+): { ok: true; value: { initial: NormalizedPose; final: NormalizedPose } } | { ok: false; error: string } {
+  if (!input || typeof input !== "object") {
+    return {
+      ok: false,
+      error: `${label} must be an object with { initial, final } coordinates.`,
+    };
+  }
+
+  const raw = input as Record<string, unknown>;
+  const initial = normalizeCoordInput(raw.initial, `${label}.initial`);
+  if (!initial.ok) return initial;
+  const final = normalizeCoordInput(raw.final, `${label}.final`);
+  if (!final.ok) return final;
+
+  return {
+    ok: true,
+    value: {
+      initial: initial.value,
+      final: final.value,
+    },
+  };
+}
+
+function pickDominantAxis(
+  deltas: Record<string, number>,
+  tolerance = 1e-6
+):
+  | { ok: true; axis: string; delta: number; maxAbs: number; secondAbs: number; ambiguous: boolean }
+  | { ok: false; reason: string } {
+  const entries = Object.entries(deltas).map(([axis, delta]) => ({ axis, delta, abs: Math.abs(delta) }));
+  entries.sort((a, b) => b.abs - a.abs);
+  const strongest = entries[0];
+  const second = entries[1] ?? { abs: 0 };
+
+  if (!strongest || strongest.abs <= tolerance) {
+    return { ok: false, reason: "no_motion" };
+  }
+
+  const ambiguous = second.abs > tolerance && second.abs >= strongest.abs * 0.2;
+  return {
+    ok: true,
+    axis: strongest.axis,
+    delta: strongest.delta,
+    maxAbs: strongest.abs,
+    secondAbs: second.abs,
+    ambiguous,
+  };
+}
+
 function parseModelSpec(model: string | undefined) {
   // Always return a defined model string
   const fallback = "google/gemini-3-flash-preview|reasoning=high";
@@ -1253,6 +1364,116 @@ function buildToolDefinitions() {
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "linkage",
+        description:
+          "Infer a planar rack-pinion linkage directly from two endpoint motions. Accepts compact coord tuples [x,y,z] or [x,y,z,rotX,rotY,rotZ], or object coordinates.",
+        parameters: {
+          type: "object",
+          properties: {
+            motionA: {
+              type: "object",
+              properties: {
+                initial: {
+                  anyOf: [
+                    {
+                      type: "array",
+                      items: { type: "number" },
+                      minItems: 3,
+                      maxItems: 6,
+                    },
+                    {
+                      type: "object",
+                      properties: {
+                        x: { type: "number" },
+                        y: { type: "number" },
+                        z: { type: "number" },
+                        rotX: { type: "number" },
+                        rotY: { type: "number" },
+                        rotZ: { type: "number" },
+                      },
+                    },
+                  ],
+                },
+                final: {
+                  anyOf: [
+                    {
+                      type: "array",
+                      items: { type: "number" },
+                      minItems: 3,
+                      maxItems: 6,
+                    },
+                    {
+                      type: "object",
+                      properties: {
+                        x: { type: "number" },
+                        y: { type: "number" },
+                        z: { type: "number" },
+                        rotX: { type: "number" },
+                        rotY: { type: "number" },
+                        rotZ: { type: "number" },
+                      },
+                    },
+                  ],
+                },
+              },
+              required: ["initial", "final"],
+            },
+            motionB: {
+              type: "object",
+              properties: {
+                initial: {
+                  anyOf: [
+                    {
+                      type: "array",
+                      items: { type: "number" },
+                      minItems: 3,
+                      maxItems: 6,
+                    },
+                    {
+                      type: "object",
+                      properties: {
+                        x: { type: "number" },
+                        y: { type: "number" },
+                        z: { type: "number" },
+                        rotX: { type: "number" },
+                        rotY: { type: "number" },
+                        rotZ: { type: "number" },
+                      },
+                    },
+                  ],
+                },
+                final: {
+                  anyOf: [
+                    {
+                      type: "array",
+                      items: { type: "number" },
+                      minItems: 3,
+                      maxItems: 6,
+                    },
+                    {
+                      type: "object",
+                      properties: {
+                        x: { type: "number" },
+                        y: { type: "number" },
+                        z: { type: "number" },
+                        rotX: { type: "number" },
+                        rotY: { type: "number" },
+                        rotZ: { type: "number" },
+                      },
+                    },
+                  ],
+                },
+              },
+              required: ["initial", "final"],
+            },
+          },
+          required: ["motionA", "motionB"],
+        },
+      },
+    },
   ];
 }
 
@@ -1386,7 +1607,8 @@ module.exports = { main, getParameterDefinitions }
 11. Use position_relative for placing geometries relative to each other - PREFER this over manual translate() calculations
 12. Use check_alignment to verify proper gear/rack meshing before finalizing code
 13. Use check_animation_intersections to diagnose gear/rack phase drift and intersection risk across progress
-14. Use get_viewport_snapshot when visual verification of the current rendered model would help
+14. Use linkage to infer rack-pinion kinematics from endpoint motions instead of manually solving linkage ratios
+15. Use get_viewport_snapshot when visual verification of the current rendered model would help
 
 ## Relative Positioning (IMPORTANT - Use Tools, Not Manual Calculations)
 
@@ -1470,6 +1692,24 @@ measure_geometry(geometry="gear", gearParams={ module: 1, teeth: 20 })
 measure_geometry(geometry="rack", rackParams={ module: 1 })
 // Returns: { pitchLine: { module: 1, description: "..." } }
 \`\`\`
+
+### Linkage Inference From Endpoints (Preferred for Motion-Driven Requests)
+When the user gives start/end motion states and wants a mechanism relationship, use
+the linkage tool first instead of asking for manual rack/pinion component breakdowns.
+
+Use two motions (each has initial/final), where each coordinate can be provided as:
+- Object form: { x, y, z, rotX, rotY, rotZ }
+- Compact coord form: coord(x, y, z) or coord(x, y, z, rotX, rotY, rotZ)
+  - In tool-call JSON, encode coord(...) as arrays: [x, y, z] or [x, y, z, rotX, rotY, rotZ]
+  - Missing rotations default to 0
+
+Example user intent:
+linkage(
+  { initial: coord(0, -2, 0), final: coord(0, 2, 0) },
+  { initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 50) }
+)
+
+The linkage tool returns inferred pitch radius, motion ratio, axis mapping, and progress-ready equations.
 
 ### Mechanism Motion Contract (Metadata-First)
 For mechanisms, always model motion around one normalized input variable:
@@ -2254,6 +2494,192 @@ function executeToolCall(
           },
           usageNote:
             "Use recommendedAbsolutePhaseShiftMm as your phase offset term, then keep rack/gear driven by one normalized progress parameter.",
+        },
+      };
+    }
+
+    case "linkage": {
+      const motionA = normalizeMotionInput(args.motionA, "motionA");
+      if (!motionA.ok) {
+        return {
+          output: {
+            success: false,
+            error: motionA.error,
+          },
+        };
+      }
+
+      const motionB = normalizeMotionInput(args.motionB, "motionB");
+      if (!motionB.ok) {
+        return {
+          output: {
+            success: false,
+            error: motionB.error,
+          },
+        };
+      }
+
+      const mA = motionA.value;
+      const mB = motionB.value;
+
+      const toDeltas = (motion: { initial: NormalizedPose; final: NormalizedPose }) => ({
+        linear: {
+          x: motion.final.x - motion.initial.x,
+          y: motion.final.y - motion.initial.y,
+          z: motion.final.z - motion.initial.z,
+        },
+        angular: {
+          rotX: motion.final.rotX - motion.initial.rotX,
+          rotY: motion.final.rotY - motion.initial.rotY,
+          rotZ: motion.final.rotZ - motion.initial.rotZ,
+        },
+      });
+
+      const dA = toDeltas(mA);
+      const dB = toDeltas(mB);
+
+      const linearA = pickDominantAxis(dA.linear);
+      const linearB = pickDominantAxis(dB.linear);
+      const angularA = pickDominantAxis(dA.angular);
+      const angularB = pickDominantAxis(dB.angular);
+
+      const hasLinearA = linearA.ok;
+      const hasLinearB = linearB.ok;
+      const hasAngularA = angularA.ok;
+      const hasAngularB = angularB.ok;
+
+      let translationalMotion: "motionA" | "motionB" | null = null;
+      let rotationalMotion: "motionA" | "motionB" | null = null;
+      if (hasLinearA && hasAngularB && !hasAngularA && !hasLinearB) {
+        translationalMotion = "motionA";
+        rotationalMotion = "motionB";
+      } else if (hasLinearB && hasAngularA && !hasAngularB && !hasLinearA) {
+        translationalMotion = "motionB";
+        rotationalMotion = "motionA";
+      } else if (hasLinearA && hasAngularB && !hasAngularA) {
+        translationalMotion = "motionA";
+        rotationalMotion = "motionB";
+      } else if (hasLinearB && hasAngularA && !hasAngularB) {
+        translationalMotion = "motionB";
+        rotationalMotion = "motionA";
+      }
+
+      if (!translationalMotion || !rotationalMotion) {
+        return {
+          output: {
+            success: false,
+            error:
+              "linkage currently supports one dominant translational motion and one dominant rotational motion across the two inputs (planar rack-pinion inference).",
+            details: {
+              motionA: { hasLinear: hasLinearA, hasAngular: hasAngularA },
+              motionB: { hasLinear: hasLinearB, hasAngular: hasAngularB },
+            },
+          },
+        };
+      }
+
+      const linearPick = translationalMotion === "motionA" ? linearA : linearB;
+      const angularPick = rotationalMotion === "motionA" ? angularA : angularB;
+      if (!linearPick.ok || !angularPick.ok) {
+        return {
+          output: {
+            success: false,
+            error: "Unable to infer dominant linear/rotational axes from provided motions.",
+          },
+        };
+      }
+
+      if (linearPick.ambiguous || angularPick.ambiguous) {
+        return {
+          output: {
+            success: false,
+            error:
+              "Ambiguous multi-axis motion detected. Provide endpoints where one linear axis and one rotational axis are dominant for v1 linkage inference.",
+            details: {
+              dominantLinearAxis: linearPick.axis,
+              dominantLinearDelta: linearPick.delta,
+              secondaryLinearMagnitude: linearPick.secondAbs,
+              dominantAngularAxis: angularPick.axis,
+              dominantAngularDelta: angularPick.delta,
+              secondaryAngularMagnitude: angularPick.secondAbs,
+            },
+          },
+        };
+      }
+
+      const linearDeltaMm = linearPick.delta;
+      const rotationDeltaDeg = angularPick.delta;
+      if (Math.abs(linearDeltaMm) <= 1e-9) {
+        return {
+          output: {
+            success: false,
+            error: "Linear delta is zero; cannot infer rack-pinion linkage.",
+          },
+        };
+      }
+      if (Math.abs(rotationDeltaDeg) <= 1e-9) {
+        return {
+          output: {
+            success: false,
+            error: "Rotational delta is zero; cannot infer rack-pinion linkage.",
+          },
+        };
+      }
+
+      const rotationDeltaRad = (rotationDeltaDeg * Math.PI) / 180;
+      const pitchRadius = Math.abs(linearDeltaMm / rotationDeltaRad);
+      const translationMmPerDeg = linearDeltaMm / rotationDeltaDeg;
+      const translationMmPerRev = translationMmPerDeg * 360;
+      const rotationDegPerMm = rotationDeltaDeg / linearDeltaMm;
+
+      const estimatedTeethAtModule1 = Math.max(6, Math.round(2 * pitchRadius));
+      const impliedModuleFromRoundedTeeth = (2 * pitchRadius) / estimatedTeethAtModule1;
+
+      const linearVariable = linearPick.axis;
+      const angleVariable = angularPick.axis;
+
+      return {
+        output: {
+          success: true,
+          mechanismType: "rack_pinion",
+          supportedScope: "planar_single_axis_v1",
+          motionClassification: {
+            translationalMotion,
+            rotationalMotion,
+            linearAxis: linearPick.axis,
+            rotationalAxis: angularPick.axis,
+          },
+          deltas: {
+            linearDeltaMm,
+            rotationDeltaDeg,
+            translationMmPerDeg,
+            translationMmPerRev,
+            rotationDegPerMm,
+          },
+          rackPinion: {
+            pitchRadius,
+            inferredDirectionSign: Math.sign(linearDeltaMm * rotationDeltaDeg) || 1,
+            equationLinearFromAngle: `${linearVariable}(thetaDeg) = ${translationMmPerDeg} * thetaDeg + offsetMm`,
+            equationAngleFromLinear: `${angleVariable}(translationMm) = ${rotationDegPerMm} * translationMm + offsetDeg`,
+            note: "Use endpoint initial conditions to solve offsetMm/offsetDeg in your generated code.",
+          },
+          progressModel: {
+            progressRange: [0, 1],
+            pinionRotationDegPerProgress: rotationDeltaDeg,
+            rackTranslationMmPerProgress: linearDeltaMm,
+            recommendation:
+              "Drive both parts from one progress parameter: angle = angle0 + pinionRotationDegPerProgress * progress, translation = translation0 + rackTranslationMmPerProgress * progress.",
+          },
+          suggestedGearParams: {
+            estimatedTeethAtModule1,
+            impliedModuleFromRoundedTeeth,
+            caveat:
+              "Pitch radius alone does not uniquely determine module and teeth; choose one and solve the other from r = module * teeth / 2.",
+          },
+          normalizedInput: {
+            motionA: mA,
+            motionB: mB,
+          },
         },
       };
     }
