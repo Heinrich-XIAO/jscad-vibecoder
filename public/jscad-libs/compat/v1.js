@@ -136,6 +136,77 @@ const normalizeBooleanArgs = (items) => flatten(items).filter(Boolean);
 
 const EPSILON = 1e-6;
 
+const toFiniteNumber = (value, fallback = 0) =>
+  typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+const normalizeCoord = (coord) => {
+  if (Array.isArray(coord)) {
+    const [x, y, z, rotX, rotY, rotZ] = coord.map((entry) => toFiniteNumber(entry));
+    return { x, y, z, rotX, rotY, rotZ };
+  }
+  if (coord && typeof coord === "object") {
+    return {
+      x: toFiniteNumber(coord.x),
+      y: toFiniteNumber(coord.y),
+      z: toFiniteNumber(coord.z),
+      rotX: toFiniteNumber(coord.rotX),
+      rotY: toFiniteNumber(coord.rotY),
+      rotZ: toFiniteNumber(coord.rotZ),
+    };
+  }
+  return { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0 };
+};
+
+const dominantAxis = (deltas) => {
+  const entries = Object.entries(deltas)
+    .map(([axis, delta]) => ({ axis, delta, abs: Math.abs(delta) }))
+    .sort((a, b) => b.abs - a.abs);
+  if (!entries.length || entries[0].abs <= EPSILON) {
+    return { axis: entries[0]?.axis ?? "x", delta: 0, ambiguous: true };
+  }
+  const second = entries[1];
+  const ambiguous = second ? second.abs >= entries[0].abs * 0.5 : false;
+  return { axis: entries[0].axis, delta: entries[0].delta, ambiguous };
+};
+
+const coord = (x, y, z, rotX = 0, rotY = 0, rotZ = 0) => [x, y, z, rotX, rotY, rotZ];
+
+const linkage = (motionA, motionB) => {
+  const probe = (motion) => ({
+    initial: normalizeCoord(motion.initial),
+    final: normalizeCoord(motion.final),
+  });
+
+  const a = probe(motionA);
+  const b = probe(motionB);
+
+  const linear = {
+    x: a.final.x - a.initial.x,
+    y: a.final.y - a.initial.y,
+    z: a.final.z - a.initial.z,
+  };
+  const angular = {
+    rotX: b.final.rotX - b.initial.rotX,
+    rotY: b.final.rotY - b.initial.rotY,
+    rotZ: b.final.rotZ - b.initial.rotZ,
+  };
+
+  const translation = dominantAxis(linear);
+  const rotation = dominantAxis(angular);
+
+  const rotationRad = (rotation.delta * Math.PI) / 180 || EPSILON;
+  const pitchRadius = Math.abs(translation.delta / rotationRad);
+
+  return {
+    translation,
+    rotation,
+    pitchRadius,
+    translationPerDegree: translation.delta / (rotation.delta || EPSILON),
+    rotationPerMillimeter: rotation.delta / (translation.delta || EPSILON),
+    normalized: { motionA: a, motionB: b },
+  };
+};
+
 const getBoundingBox = (geometry) => {
   try {
     const bbox = measurements.measureBoundingBox(geometry);
@@ -342,7 +413,9 @@ const api = {
   rotate,
   scale,
   color,
-  booleans: booleansCompat
+  booleans: booleansCompat,
+  coord,
+  linkage,
 };
 
 // Helper to unwrap geometries before serialization (removes wrapper methods)
