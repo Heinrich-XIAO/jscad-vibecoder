@@ -66,32 +66,6 @@ module.exports = { main, getParameterDefinitions }`,
         },
       },
       {
-        name: "Rounded Box",
-        description: "A box with rounded edges, great for enclosures",
-        category: "Enclosures",
-        jscadCode: `const { roundedCuboid } = require('@jscad/modeling').primitives
-
-const getParameterDefinitions = () => [
-  { name: 'width', type: 'float', initial: 50, caption: 'Width (mm)' },
-  { name: 'depth', type: 'float', initial: 30, caption: 'Depth (mm)' },
-  { name: 'height', type: 'float', initial: 20, caption: 'Height (mm)' },
-  { name: 'roundRadius', type: 'float', initial: 2, caption: 'Corner Radius (mm)' },
-]
-
-const main = (params) => {
-  const { width = 50, depth = 30, height = 20, roundRadius = 2 } = params || {}
-  return [roundedCuboid({ size: [width, depth, height], roundRadius })]
-}
-
-module.exports = { main, getParameterDefinitions }`,
-        parameterSchema: {
-          width: { type: "number", min: 1, max: 200, default: 50, label: "Width (mm)" },
-          depth: { type: "number", min: 1, max: 200, default: 30, label: "Depth (mm)" },
-          height: { type: "number", min: 1, max: 200, default: 20, label: "Height (mm)" },
-          roundRadius: { type: "number", min: 0.1, max: 20, default: 2, label: "Corner Radius (mm)" },
-        },
-      },
-      {
         name: "Mounting Bracket",
         description: "L-shaped bracket with mounting holes",
         category: "Mechanical",
@@ -151,6 +125,12 @@ module.exports = { main }`,
 
     const existingTemplates = await ctx.db.query("templates").collect();
     const existingByName = new Map(existingTemplates.map((template) => [template.name, template]));
+
+    for (const existingTemplate of existingTemplates) {
+      if (existingTemplate.name === "Rounded Box") {
+        await ctx.db.delete(existingTemplate._id);
+      }
+    }
 
     for (const t of templates) {
       const existingTemplate = existingByName.get(t.name);
