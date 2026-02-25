@@ -178,6 +178,47 @@ const dominantAxis = (deltas) => {
 
 const coord = (x, y, z, rotX = 0, rotY = 0, rotZ = 0) => [x, y, z, rotX, rotY, rotZ];
 
+const unwrapGeometry = (geometry) => {
+  if (!geometry) return geometry;
+  if (Array.isArray(geometry)) return geometry.map((item) => unwrapGeometry(item));
+  if (typeof geometry === "object" && geometry.__v1Wrapped) {
+    const clean = {};
+    for (const key in geometry) {
+      if (key !== "__v1Wrapped" && typeof geometry[key] !== "function") {
+        clean[key] = geometry[key];
+      }
+    }
+    return clean;
+  }
+  return geometry;
+};
+
+const defaultPrinterSettings = {
+  scale: 1,
+  correctionInsideDiameter: 0,
+  correctionOutsideDiameter: 0,
+  correctionInsideDiameterMoving: 0,
+  correctionOutsideDiameterMoving: 0,
+  resolutionCircle: 360,
+};
+
+const applyPose = (geometry, pose) => {
+  const radians = [degToRad(pose.rotX), degToRad(pose.rotY), degToRad(pose.rotZ)];
+  const rotated = transforms.rotate(radians, geometry);
+  return transforms.translate([pose.x, pose.y, pose.z], rotated);
+};
+
+const getMechanicsApi = () => {
+  const root = typeof globalThis !== "undefined" ? globalThis : {};
+  const mechanics = root.window?.jscad?.tspi;
+  if (!mechanics?.gear || !mechanics?.rack) {
+    throw new Error(
+      "linkage() requires /jscad-libs/mechanics/gears.jscad and /jscad-libs/mechanics/racks.jscad to be loaded."
+    );
+  }
+  return mechanics;
+};
+
 const linkage = (motionA, motionB) => {
   const probe = (motion) => ({
     initial: normalizeCoord(motion?.initial),
@@ -229,21 +270,20 @@ const linkage = (motionA, motionB) => {
     rotationSource = "motionA";
   }
 
-  const rotationRad = (rotation.delta * Math.PI) / 180 || EPSILON;
-  const pitchRadius = Math.abs(translation.delta / rotationRad);
+  const mechanics = getMechanicsApi();
+  const rackSource = translationSource === "motionA" ? a.initial : b.initial;
+  const pinionSource = rotationSource === "motionA" ? a.initial : b.initial;
 
-  return {
-    translation,
-    rotation,
-    classification: {
-      translationSource,
-      rotationSource,
-    },
-    pitchRadius,
-    translationPerDegree: translation.delta / (rotation.delta || EPSILON),
-    rotationPerMillimeter: rotation.delta / (translation.delta || EPSILON),
-    normalized: { motionA: a, motionB: b },
-  };
+  const rackPart = mechanics.rack(defaultPrinterSettings, 0, 8, 1, 20, 20, 0, 2);
+  const pinionPart = mechanics.gear(defaultPrinterSettings, 40, 8, 6, 1, 20);
+
+  const rackModel = typeof rackPart?.getModel === "function" ? rackPart.getModel() : rackPart;
+  const pinionModel = typeof pinionPart?.getModel === "function" ? pinionPart.getModel() : pinionPart;
+
+  const positionedRack = applyPose(rackModel, rackSource);
+  const positionedPinion = applyPose(pinionModel, pinionSource);
+
+  return [unwrapGeometry(positionedRack), unwrapGeometry(positionedPinion)];
 };
 
 const getBoundingBox = (geometry) => {
@@ -458,23 +498,7 @@ const api = {
 };
 
 // Helper to unwrap geometries before serialization (removes wrapper methods)
-api.unwrap = function(geometry) {
-  if (!geometry) return geometry;
-  if (Array.isArray(geometry)) {
-    return geometry.map(g => api.unwrap(g));
-  }
-  if (typeof geometry === 'object' && geometry.__v1Wrapped) {
-    // Create a clean copy without wrapper methods
-    const clean = {};
-    for (const key in geometry) {
-      if (key !== '__v1Wrapped' && typeof geometry[key] !== 'function') {
-        clean[key] = geometry[key];
-      }
-    }
-    return clean;
-  }
-  return geometry;
-};
+api.unwrap = unwrapGeometry;
 
 const target = typeof globalThis !== "undefined" ? globalThis : {};
 Object.assign(target, api);

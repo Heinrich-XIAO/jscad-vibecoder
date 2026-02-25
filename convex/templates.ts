@@ -138,22 +138,11 @@ module.exports = { main, getParameterDefinitions }`,
         description:
           "Uses built-in coord() and linkage() helpers to drive a rack-and-pinion pair from endpoint motions.",
         category: "Mechanisms",
-        jscadCode: `const { cuboid, cylinder } = require('@jscad/modeling').primitives
-const { translate, rotateZ } = require('@jscad/modeling').transforms
-
-function main() {
-  const inferred = linkage(
+        jscadCode: `function main() {
+  return linkage(
     { initial: coord(0, -2, 0), final: coord(0, 2, 0) },
     { initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 50) }
   )
-
-  const rack = translate([0, -2, 0], cuboid({ size: [20, 4, 4] }))
-  const pinion = translate(
-    [10, 0, 2],
-    rotateZ((inferred.rotation.delta * Math.PI) / 180, cylinder({ height: 8, radius: inferred.pitchRadius, segments: 64 }))
-  )
-
-  return [rack, pinion]
 }
 
 module.exports = { main }`,

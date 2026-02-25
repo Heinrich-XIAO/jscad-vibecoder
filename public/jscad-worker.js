@@ -203,6 +203,8 @@ self.onmessage = function(e) {
       // Load v1 compatibility helpers by default so coord()/linkage() are
       // available in all scripts without manual include().
       executeExternalModule('/jscad-libs/compat/v1.js');
+      executeExternalModule('/jscad-libs/mechanics/gears.jscad');
+      executeExternalModule('/jscad-libs/mechanics/racks.jscad');
       
       // Create the function and execute
       const fn = new Function('require', 'module', 'exports', 'include', 'window', code);
