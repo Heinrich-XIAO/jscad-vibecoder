@@ -202,6 +202,8 @@ const defaultPrinterSettings = {
   resolutionCircle: 360,
 };
 
+const DEFAULT_RACK_PINION_GAP = 0.6;
+
 const applyPose = (geometry, pose) => {
   const radians = [degToRad(pose.rotX), degToRad(pose.rotY), degToRad(pose.rotZ)];
   const rotated = transforms.rotate(radians, geometry);
@@ -274,14 +276,33 @@ const linkage = (motionA, motionB) => {
   const rackSource = translationSource === "motionA" ? a.initial : b.initial;
   const pinionSource = rotationSource === "motionA" ? a.initial : b.initial;
 
-  const rackPart = mechanics.rack(defaultPrinterSettings, 0, 8, 1, 20, 20, 0, 2);
-  const pinionPart = mechanics.gear(defaultPrinterSettings, 40, 8, 6, 1, 20);
+  const rackPart = mechanics.rack(defaultPrinterSettings);
+  const pinionPart = mechanics.gear(defaultPrinterSettings);
 
   const rackModel = typeof rackPart?.getModel === "function" ? rackPart.getModel() : rackPart;
   const pinionModel = typeof pinionPart?.getModel === "function" ? pinionPart.getModel() : pinionPart;
 
-  const positionedRack = applyPose(rackModel, rackSource);
-  const positionedPinion = applyPose(pinionModel, pinionSource);
+  const pitchRadius =
+    typeof pinionPart?.getPitchFeatures === "function"
+      ? toFiniteNumber(pinionPart.getPitchFeatures()?.pitchCircle?.radius, 0)
+      : 0;
+
+  const alignedRackPose = {
+    ...rackSource,
+    y: 0,
+  };
+  const rackBounds = measurements.measureBoundingBox(rackModel);
+  const pinionBounds = measurements.measureBoundingBox(pinionModel);
+  const rackTopY = rackBounds?.[1]?.[1] ?? 0;
+  const pinionBottomY = pinionBounds?.[0]?.[1] ?? 0;
+  const minimumPinionCenterY = alignedRackPose.y + rackTopY - pinionBottomY + DEFAULT_RACK_PINION_GAP;
+  const alignedPinionPose = {
+    ...pinionSource,
+    y: Math.max(pitchRadius + DEFAULT_RACK_PINION_GAP, minimumPinionCenterY),
+  };
+
+  const positionedRack = applyPose(rackModel, alignedRackPose);
+  const positionedPinion = applyPose(pinionModel, alignedPinionPose);
 
   return [unwrapGeometry(positionedRack), unwrapGeometry(positionedPinion)];
 };

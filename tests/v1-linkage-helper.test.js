@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { expect, test } from "bun:test";
 
 const require = createRequire(import.meta.url);
+const { booleans, measurements } = require("@jscad/modeling");
 
 function evalLib(filePath) {
   const code = readFileSync(filePath, "utf8").replace(
@@ -56,6 +57,9 @@ test("linkage returns prebuilt rack and pinion geometries", () => {
   expect(assembly[1]).toBeTruthy();
   expect(Array.isArray(assembly[0].polygons)).toBe(true);
   expect(Array.isArray(assembly[1].polygons)).toBe(true);
+
+  const overlap = booleans.intersect(assembly[0], assembly[1]);
+  expect(measurements.measureVolume(overlap)).toBeLessThan(1);
 });
 
 test("linkage works when rotation and translation motions are swapped", () => {
