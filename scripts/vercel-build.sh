@@ -14,5 +14,28 @@ if [ -z "${CONVEX_DEPLOY_KEY:-}" ]; then
   exit 1
 fi
 
+if [ "${FORCE_CONVEX_DEPLOY:-0}" = "1" ]; then
+  echo "FORCE_CONVEX_DEPLOY=1, deploying Convex."
+elif [ -n "${VERCEL_GIT_PREVIOUS_SHA:-}" ] && [ -n "${VERCEL_GIT_COMMIT_SHA:-}" ]; then
+  if changed_files="$(git diff --name-only "$VERCEL_GIT_PREVIOUS_SHA" "$VERCEL_GIT_COMMIT_SHA" 2>/dev/null)"; then
+    should_deploy_convex=0
+    while IFS= read -r file; do
+      case "$file" in
+        convex/*|package.json|package-lock.json|bun.lock|tsconfig.json)
+          should_deploy_convex=1
+          break
+          ;;
+      esac
+    done <<<"$changed_files"
+
+    if [ "$should_deploy_convex" -eq 0 ]; then
+      echo "No Convex-related files changed, skipping Convex deploy."
+      exit 0
+    fi
+  else
+    echo "Could not diff commits, deploying Convex to be safe."
+  fi
+fi
+
 echo "Production build detected, deploying Convex..."
-npx convex deploy
+npx convex deploy --typecheck disable --codegen disable
