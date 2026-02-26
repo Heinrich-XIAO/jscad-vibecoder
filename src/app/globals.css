@@ -88,16 +88,16 @@ body {
 
 @keyframes gradient-pulse {
   0%, 100% {
-    box-shadow: 0 0 20px 4px rgba(139, 92, 246, 0.4);
+    box-shadow: 0 0 20px 4px rgba(255, 255, 255, 0.3);
   }
   50% {
-    box-shadow: 0 0 30px 8px rgba(236, 72, 153, 0.5);
+    box-shadow: 0 0 30px 8px rgba(255, 255, 255, 0.5);
   }
 }
 
 .animate-gradient {
   background: #2563eb;
-  animation: gradient-pulse 2s ease-in-out infinite;
+  animation: gradient-pulse 4s ease-in-out infinite;
 }
 
 .scrollbar-hide {
