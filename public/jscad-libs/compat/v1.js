@@ -202,7 +202,7 @@ const defaultPrinterSettings = {
   resolutionCircle: 360,
 };
 
-const DEFAULT_RACK_PINION_GAP = 0.6;
+const DEFAULT_RACK_PINION_GAP = 0;
 
 const applyPose = (geometry, pose) => {
   const radians = [degToRad(pose.rotX), degToRad(pose.rotY), degToRad(pose.rotZ)];
@@ -219,6 +219,14 @@ const getMechanicsApi = () => {
     );
   }
   return mechanics;
+};
+
+const normalizePhaseOffset = (distance, period) => {
+  if (!Number.isFinite(distance) || !Number.isFinite(period) || period <= EPSILON) return 0;
+  let wrapped = distance % period;
+  if (wrapped < 0) wrapped += period;
+  if (wrapped > period / 2) wrapped -= period;
+  return wrapped;
 };
 
 const linkage = (motionA, motionB) => {
@@ -287,18 +295,36 @@ const linkage = (motionA, motionB) => {
       ? toFiniteNumber(pinionPart.getPitchFeatures()?.pitchCircle?.radius, 0)
       : 0;
 
+  const rackPitch =
+    typeof rackPart?.getPitchFeatures === "function"
+      ? toFiniteNumber(rackPart.getPitchFeatures()?.circularPitch, 0)
+      : 0;
+  const gearPhase =
+    typeof pinionPart?.getPhaseMetadata === "function" ? pinionPart.getPhaseMetadata() : null;
+  const rackPhase =
+    typeof rackPart?.getPhaseMetadata === "function" ? rackPart.getPhaseMetadata() : null;
+  const recommendedRackShiftAtStart = toFiniteNumber(
+    gearPhase?.recommendedRackShiftAtStart,
+    0
+  );
+  const rackPhaseOriginX = toFiniteNumber(rackPhase?.phaseOrigin?.[0], 0);
+
   const alignedRackPose = {
     ...rackSource,
     y: 0,
   };
-  const rackBounds = measurements.measureBoundingBox(rackModel);
-  const pinionBounds = measurements.measureBoundingBox(pinionModel);
-  const rackTopY = rackBounds?.[1]?.[1] ?? 0;
-  const pinionBottomY = pinionBounds?.[0]?.[1] ?? 0;
-  const minimumPinionCenterY = alignedRackPose.y + rackTopY - pinionBottomY + DEFAULT_RACK_PINION_GAP;
+  const contactXInRackFrame = pinionSource.x - alignedRackPose.x - rackPhaseOriginX;
+  const phaseResidualMm = normalizePhaseOffset(
+    contactXInRackFrame - recommendedRackShiftAtStart,
+    rackPitch
+  );
+  const alignmentRotationDeg =
+    Math.abs(pitchRadius) > EPSILON ? -(phaseResidualMm / pitchRadius) * (180 / Math.PI) : 0;
+
   const alignedPinionPose = {
     ...pinionSource,
-    y: Math.max(pitchRadius + DEFAULT_RACK_PINION_GAP, minimumPinionCenterY),
+    y: alignedRackPose.y + pitchRadius + DEFAULT_RACK_PINION_GAP,
+    rotZ: toFiniteNumber(pinionSource.rotZ, 0) + alignmentRotationDeg,
   };
 
   const positionedRack = applyPose(rackModel, alignedRackPose);
