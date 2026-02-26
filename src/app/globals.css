@@ -85,3 +85,34 @@ body {
   margin-left: 4px;
   border-radius: 9999px;
 }
+
+@keyframes gradient-pulse {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient {
+  background: linear-gradient(
+    90deg,
+    #2563eb,
+    #8b5cf6,
+    #ec4899,
+    #8b5cf6,
+    #2563eb
+  );
+  background-size: 300% 100%;
+  animation: gradient-pulse 3s ease infinite;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

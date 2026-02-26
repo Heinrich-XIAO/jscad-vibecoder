@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth-server";
 import { CLERK_DISABLED } from "@/lib/auth-config";
 import { ArrowRight, Box, Zap, Bot, Download, Settings, Play, Github } from "lucide-react";
 import DashboardPage from "./dashboard-client";
+import FeaturesCarousel from "@/components/features-carousel";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,7 @@ export default async function Page() {
           <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
             <Link
               href="/playground"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-lg font-medium text-primary-foreground hover:bg-primary/90"
+              className="inline-flex items-center justify-center gap-2 rounded-lg animate-gradient px-6 py-3 text-lg font-medium text-white shadow-lg hover:opacity-90"
             >
               <Play className="h-5 w-5" />
               Playground
@@ -116,55 +117,7 @@ export default async function Page() {
         </div>
       </section>
 
-      <section className="px-6 py-20">
-        <div className="mx-auto max-w-5xl">
-          <h2 className="text-2xl font-bold text-center mb-12">Features</h2>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="rounded-xl border border-border bg-card p-6">
-              <Zap className="h-6 w-6 text-primary mb-3" />
-              <h3 className="font-semibold mb-2">Parametric Design</h3>
-              <p className="text-sm text-muted-foreground">
-                Variables and parameters that update your model instantly
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-6">
-              <Bot className="h-6 w-6 text-primary mb-3" />
-              <h3 className="font-semibold mb-2">AI Generation</h3>
-              <p className="text-sm text-muted-foreground">
-                Natural language to CAD code in seconds
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-6">
-              <Box className="h-6 w-6 text-primary mb-3" />
-              <h3 className="font-semibold mb-2">JSCAD Compatible</h3>
-              <p className="text-sm text-muted-foreground">
-                Full access to JSCAD modeling primitives and operations
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-6">
-              <Settings className="h-6 w-6 text-primary mb-3" />
-              <h3 className="font-semibold mb-2">Animation Support</h3>
-              <p className="text-sm text-muted-foreground">
-                Build moving mechanisms with phase-aware diagnostics
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-6">
-              <Download className="h-6 w-6 text-primary mb-3" />
-              <h3 className="font-semibold mb-2">Export Ready</h3>
-              <p className="text-sm text-muted-foreground">
-                STL, OBJ, and STEP formats for manufacturing
-              </p>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-6">
-              <Github className="h-6 w-6 text-primary mb-3" />
-              <h3 className="font-semibold mb-2">Open Source</h3>
-              <p className="text-sm text-muted-foreground">
-                Free and open, built with Next.js and JSCAD
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+      <FeaturesCarousel />
 
       <footer className="border-t border-border px-6 py-8">
         <div className="mx-auto max-w-5xl flex flex-col sm:flex-row items-center justify-between gap-4">
