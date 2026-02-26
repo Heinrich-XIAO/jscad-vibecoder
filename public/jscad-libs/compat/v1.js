@@ -304,9 +304,9 @@ const linkage = (motionA, motionB) => {
     typeof pinionPart?.getPhaseMetadata === "function" ? pinionPart.getPhaseMetadata() : null;
   const rackPhase =
     typeof rackPart?.getPhaseMetadata === "function" ? rackPart.getPhaseMetadata() : null;
-  const recommendedRackShiftAtStart = toFiniteNumber(
-    gearPhase?.recommendedRackShiftAtStart,
-    0
+  const rackReferenceToothCenterAtStart = toFiniteNumber(
+    rackPhase?.referenceToothCenterAtStart,
+    toFiniteNumber(gearPhase?.recommendedRackShiftAtStart, 0)
   );
   const rackPhaseOriginX = toFiniteNumber(rackPhase?.phaseOrigin?.[0], 0);
 
@@ -316,7 +316,7 @@ const linkage = (motionA, motionB) => {
   };
   const contactXInRackFrame = pinionSource.x - alignedRackPose.x - rackPhaseOriginX;
   const phaseResidualMm = normalizePhaseOffset(
-    contactXInRackFrame - recommendedRackShiftAtStart,
+    contactXInRackFrame - rackReferenceToothCenterAtStart,
     rackPitch
   );
   const alignmentRotationDeg =
