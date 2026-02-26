@@ -6,6 +6,7 @@ import { TRPCProvider } from "@/lib/trpc-provider";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ClerkProvider } from "@clerk/nextjs";
+import { CLERK_DISABLED } from "@/lib/auth-config";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,23 +28,27 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
-    <ClerkProvider>
-      <html lang="en" className="dark">
-        <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        >
-          <ThemeProvider>
-            <ErrorBoundary>
-              <ConvexClientProvider>
-                <TRPCProvider>
-                  {children}
-                </TRPCProvider>
-              </ConvexClientProvider>
-            </ErrorBoundary>
-          </ThemeProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+  const content = (
+    <html lang="en" className="dark">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <ThemeProvider>
+          <ErrorBoundary>
+            <ConvexClientProvider>
+              <TRPCProvider>
+                {children}
+              </TRPCProvider>
+            </ConvexClientProvider>
+          </ErrorBoundary>
+        </ThemeProvider>
+      </body>
+    </html>
   );
+
+  if (CLERK_DISABLED) {
+    return content;
+  }
+
+  return <ClerkProvider>{content}</ClerkProvider>;
 }

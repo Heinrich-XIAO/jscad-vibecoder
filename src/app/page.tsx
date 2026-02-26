@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth-server";
 import { ArrowRight, Box, LogIn } from "lucide-react";
 import DashboardPage from "./dashboard-client";
 

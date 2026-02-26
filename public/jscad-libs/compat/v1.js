@@ -202,7 +202,7 @@ const defaultPrinterSettings = {
   resolutionCircle: 360,
 };
 
-const DEFAULT_RACK_PINION_GAP = 0;
+const DEFAULT_RACK_PINION_GAP = 0.05;
 
 const applyPose = (geometry, pose) => {
   const radians = [degToRad(pose.rotX), degToRad(pose.rotY), degToRad(pose.rotZ)];

@@ -9,7 +9,7 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { useKeyboardShortcuts, type KeyboardShortcut } from "@/lib/use-keyboard-shortcuts";
 import { useRouter } from "next/navigation";
-import { useAuth, UserButton, SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import { useAuth, UserButton, SignInButton, SignedIn, SignedOut } from "@/lib/auth-client";
 
 export default function DashboardPage() {
   const router = useRouter();

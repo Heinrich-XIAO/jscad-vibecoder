@@ -19,7 +19,7 @@ import { extractParameters, type ExtractedParameter } from "@/lib/parameter-extr
 import { useJscadWorker, type JscadExecutionError } from "@/lib/jscad-worker";
 import { useKeyboardShortcuts, type KeyboardShortcut } from "@/lib/use-keyboard-shortcuts";
 import { useUndoRedo } from "@/lib/use-undo-redo";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from "@/lib/auth-client";
 
 interface ParameterValues {
   [key: string]: number | boolean | string;

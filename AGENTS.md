@@ -13,6 +13,11 @@
 ## System Prompt
 * The project system prompt lives in `src/server/routers/codegen.ts` inside `buildSystemPrompt(...)`.
 
+## Local Auth Flag
+* To disable Clerk in local/dev testing (and remove the keyless popup overlay), set `NEXT_PUBLIC_DISABLE_CLERK=1`.
+* This flag bypasses Clerk provider/hooks and runs the app in guest mode.
+* For consistency across server/client paths, set `DISABLE_CLERK=1` alongside `NEXT_PUBLIC_DISABLE_CLERK=1`.
+
 ## Mistake Log
 * If you make a mistake that costs a significant amount of time, write it down in this file for future agents.
  
