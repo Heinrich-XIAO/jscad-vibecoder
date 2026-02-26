@@ -22,7 +22,7 @@ export default async function Page() {
           </div>
           <span className="font-bold text-lg">OpenMech</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {CLERK_DISABLED && (
             <Link
               href="/playground"
@@ -32,12 +32,20 @@ export default async function Page() {
             </Link>
           )}
           {!CLERK_DISABLED && (
-            <Link
-              href="/sign-in"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground"
-            >
-              Login
-            </Link>
+            <>
+              <Link
+                href="/sign-in"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/sign-up"
+                className="text-sm font-medium bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90"
+              >
+                Sign Up
+              </Link>
+            </>
           )}
         </div>
       </nav>
