@@ -54,27 +54,12 @@ export default async function Page() {
           </p>
           
           <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
-            {CLERK_DISABLED ? (
-              <Link
-                href="/playground"
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-lg font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                <Play className="h-5 w-5" />
-                Try Playground
-              </Link>
-            ) : (
-              <Link
-                href="/sign-up"
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-lg font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                Sign Up Free
-              </Link>
-            )}
             <Link
-              href={CLERK_DISABLED ? "/playground" : "/sign-in"}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-6 py-3 text-lg font-medium hover:bg-secondary"
+              href="/playground"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-lg font-medium text-primary-foreground hover:bg-primary/90"
             >
-              {CLERK_DISABLED ? "Try Playground" : "Sign In"}
+              <Play className="h-5 w-5" />
+              Playground
             </Link>
             <Link
               href="https://github.com/Heinrich-XIAO/openmech"
