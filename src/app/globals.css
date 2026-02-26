@@ -111,10 +111,10 @@ body {
 
 @keyframes marquee {
   0% {
-    transform: translateX(0);
+    transform: translateX(-25%);
   }
   100% {
-    transform: translateX(-33.333%);
+    transform: translateX(-75%);
   }
 }
 

@@ -43,7 +43,7 @@ export default function FeaturesCarousel() {
         
         <div className="relative">
           <div className="flex animate-marquee gap-4">
-            {[...features, ...features, ...features].map((feature, index) => (
+            {[...features, ...features, ...features, ...features].map((feature, index) => (
               <div
                 key={index}
                 className="flex-shrink-0 w-[280px] sm:w-[320px]"
