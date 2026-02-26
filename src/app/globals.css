@@ -88,10 +88,10 @@ body {
 
 @keyframes gradient-pulse {
   0%, 100% {
-    box-shadow: 0 0 10px 2px rgba(255, 255, 255, 0.3);
+    box-shadow: 0 0 10px 2px rgba(37, 99, 235, 0.3);
   }
   50% {
-    box-shadow: 0 0 15px 4px rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 15px 4px rgba(37, 99, 235, 0.5);
   }
 }
 
