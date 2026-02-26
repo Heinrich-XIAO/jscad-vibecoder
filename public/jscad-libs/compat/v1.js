@@ -283,6 +283,7 @@ const linkage = (motionA, motionB) => {
   const mechanics = getMechanicsApi();
   const rackSource = translationSource === "motionA" ? a.initial : b.initial;
   const pinionSource = rotationSource === "motionA" ? a.initial : b.initial;
+  const rotationSourceMotion = rotationSource === "motionA" ? a : b;
 
   const rackPart = mechanics.rack(defaultPrinterSettings);
   const pinionPart = mechanics.gear(defaultPrinterSettings);
@@ -321,10 +322,18 @@ const linkage = (motionA, motionB) => {
   const alignmentRotationDeg =
     Math.abs(pitchRadius) > EPSILON ? -(phaseResidualMm / pitchRadius) * (180 / Math.PI) : 0;
 
+  const rotationDelta = {
+    rotX: rotationSourceMotion.final.rotX - rotationSourceMotion.initial.rotX,
+    rotY: rotationSourceMotion.final.rotY - rotationSourceMotion.initial.rotY,
+    rotZ: rotationSourceMotion.final.rotZ - rotationSourceMotion.initial.rotZ,
+  };
+
   const alignedPinionPose = {
     ...pinionSource,
     y: alignedRackPose.y + pitchRadius + DEFAULT_RACK_PINION_GAP,
-    rotZ: toFiniteNumber(pinionSource.rotZ, 0) + alignmentRotationDeg,
+    rotX: rotationDelta.rotX,
+    rotY: rotationDelta.rotY,
+    rotZ: rotationDelta.rotZ + alignmentRotationDeg,
   };
 
   const positionedRack = applyPose(rackModel, alignedRackPose);

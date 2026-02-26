@@ -85,3 +85,18 @@ test("linkage rotates pinion phase to match rack position", () => {
   expect(Array.isArray(phaseB[1].transforms)).toBe(true);
   expect(phaseA[1].transforms).not.toEqual(phaseB[1].transforms);
 });
+
+test("linkage treats rotation input as delta, not absolute angle", () => {
+  const v1 = loadCompatAndMechanics();
+
+  const base = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+  );
+  const offsetAngles = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 120), final: v1.coord(10, 0, 0, 0, 0, 170) }
+  );
+
+  expect(base[1].transforms).toEqual(offsetAngles[1].transforms);
+});
