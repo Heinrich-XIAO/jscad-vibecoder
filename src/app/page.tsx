@@ -23,14 +23,15 @@ export default async function Page() {
           <span className="font-bold text-lg">OpenMech</span>
         </div>
         <div className="flex items-center gap-4">
-          {CLERK_DISABLED ? (
+          {CLERK_DISABLED && (
             <Link
               href="/playground"
               className="text-sm font-medium text-muted-foreground hover:text-foreground"
             >
               Playground
             </Link>
-          ) : (
+          )}
+          {!CLERK_DISABLED && (
             <Link
               href="/sign-in"
               className="text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -63,20 +64,25 @@ export default async function Page() {
               </Link>
             ) : (
               <Link
-                href="/sign-in"
+                href="/sign-up"
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-lg font-medium text-primary-foreground hover:bg-primary/90"
               >
-                Get Started
-                <ArrowRight className="h-5 w-5" />
+                Sign Up Free
               </Link>
             )}
+            <Link
+              href={CLERK_DISABLED ? "/playground" : "/sign-in"}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-6 py-3 text-lg font-medium hover:bg-secondary"
+            >
+              {CLERK_DISABLED ? "Try Playground" : "Sign In"}
+            </Link>
             <Link
               href="https://github.com/Heinrich-XIAO/openmech"
               target="_blank"
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-6 py-3 text-lg font-medium hover:bg-secondary"
             >
               <Github className="h-5 w-5" />
-              View on GitHub
+              GitHub
             </Link>
           </div>
         </div>

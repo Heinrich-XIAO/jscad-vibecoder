@@ -75,12 +75,12 @@ export default function DashboardPage() {
     }
   }, [createProject, router, userId]);
 
-  const handleCreateFromTemplate = async (templateId: Id<"templates">) => {
+  const handleCreateFromTemplate = async (templateId: Id<"templates">, templateName: string) => {
     if (!userId) return;
     setIsCreating(true);
     try {
       const projectId = await createProject({
-        name: "New Project from Template",
+        name: templateName,
         description: "",
         templateId,
         ownerId: userId,
@@ -396,7 +396,7 @@ export default function DashboardPage() {
                     {template.description}
                   </p>
                   <button
-                    onClick={() => handleCreateFromTemplate(template._id)}
+                    onClick={() => handleCreateFromTemplate(template._id, template.name)}
                     disabled={isCreating}
                     className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80 transition-colors disabled:opacity-50"
                   >
