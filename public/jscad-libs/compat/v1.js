@@ -202,7 +202,7 @@ const defaultPrinterSettings = {
   resolutionCircle: 360,
 };
 
-const DEFAULT_RACK_PINION_GAP = 0.05;
+const DEFAULT_RACK_PINION_GAP = 0;
 
 const applyPose = (geometry, pose) => {
   const radians = [degToRad(pose.rotX), degToRad(pose.rotY), degToRad(pose.rotZ)];
@@ -312,7 +312,6 @@ const linkage = (motionA, motionB) => {
 
   const alignedRackPose = {
     ...rackSource,
-    y: 0,
   };
   const contactXInRackFrame = pinionSource.x - alignedRackPose.x - rackPhaseOriginX;
   const phaseResidualMm = normalizePhaseOffset(
@@ -330,7 +329,7 @@ const linkage = (motionA, motionB) => {
 
   const alignedPinionPose = {
     ...pinionSource,
-    y: alignedRackPose.y + pitchRadius + DEFAULT_RACK_PINION_GAP,
+    y: rackSource.y + pitchRadius + DEFAULT_RACK_PINION_GAP,
     rotX: rotationDelta.rotX,
     rotY: rotationDelta.rotY,
     rotZ: rotationDelta.rotZ + alignmentRotationDeg,
