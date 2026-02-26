@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth-server";
-import { ArrowRight, Box, LogIn } from "lucide-react";
+import { CLERK_DISABLED } from "@/lib/auth-config";
+import { ArrowRight, Box, LogIn, Play } from "lucide-react";
 import DashboardPage from "./dashboard-client";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,15 @@ export default async function Page() {
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            {CLERK_DISABLED && (
+              <Link
+                href="/project/playground"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-secondary px-5 py-2.5 font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+              >
+                <Play className="h-4 w-4" />
+                Playground
+              </Link>
+            )}
             <Link
               href="/sign-in"
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
