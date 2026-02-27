@@ -38,7 +38,6 @@ const features = [
 
 export default function FeaturesCarousel() {
   const trackRef = useRef<HTMLDivElement>(null);
-  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     const track = trackRef.current;
@@ -46,8 +45,6 @@ export default function FeaturesCarousel() {
 
     const items = track.querySelectorAll(".carousel-item");
     if (items.length === 0) return;
-
-    setIsReady(true);
 
     let pos = 0;
     const itemWidth = (items[0] as HTMLElement).offsetWidth;
@@ -68,7 +65,7 @@ export default function FeaturesCarousel() {
 
     const animationId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationId);
-  }, [isReady]);
+  }, []);
 
   return (
     <section className="px-6 py-20 overflow-hidden">
@@ -79,7 +76,7 @@ export default function FeaturesCarousel() {
           <div 
             ref={trackRef} 
             className="flex gap-4"
-            style={{ width: isReady ? "fit-content" : "max-content" }}
+            style={{ width: "max-content" }}
           >
             {[...features, ...features, ...features, ...features, ...features, ...features].map((feature, index) => (
               <div
