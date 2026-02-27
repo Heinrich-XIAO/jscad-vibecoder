@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, Zap, Bot, Download, Settings, Github } from "lucide-react";
 
 const features = [
@@ -38,20 +38,25 @@ const features = [
 
 export default function FeaturesCarousel() {
   const trackRef = useRef<HTMLDivElement>(null);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     const track = trackRef.current;
     if (!track) return;
 
-    let pos = 0;
     const items = track.querySelectorAll(".carousel-item");
-    const itemWidth = items[0]?.clientWidth || 320;
+    if (items.length === 0) return;
+
+    setIsReady(true);
+
+    let pos = 0;
+    const itemWidth = (items[0] as HTMLElement).offsetWidth;
     const gap = 16;
     const totalItemWidth = itemWidth + gap;
+    const totalWidth = totalItemWidth * features.length;
 
     const animate = () => {
       pos -= 1;
-      const totalWidth = totalItemWidth * features.length;
       
       if (pos <= -totalWidth) {
         pos += totalWidth;
@@ -63,18 +68,18 @@ export default function FeaturesCarousel() {
 
     const animationId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationId);
-  }, []);
+  }, [isReady]);
 
   return (
     <section className="px-6 py-20 overflow-hidden">
       <div className="mx-auto max-w-5xl">
         <h2 className="text-2xl font-bold text-center mb-12">Features</h2>
         
-        <div className="relative">
+        <div className="relative overflow-hidden">
           <div 
             ref={trackRef} 
             className="flex gap-4"
-            style={{ width: "fit-content" }}
+            style={{ width: isReady ? "fit-content" : "max-content" }}
           >
             {[...features, ...features, ...features, ...features, ...features, ...features].map((feature, index) => (
               <div
