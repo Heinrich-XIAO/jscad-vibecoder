@@ -69,10 +69,10 @@ export default function FeaturesCarousel() {
 
   return (
     <section className="px-6 py-20 overflow-hidden">
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto">
         <h2 className="text-2xl font-bold text-center mb-12">Features</h2>
         
-        <div className="relative overflow-hidden">
+        <div className="relative overflow-visible">
           <div 
             ref={trackRef} 
             className="flex gap-4"
