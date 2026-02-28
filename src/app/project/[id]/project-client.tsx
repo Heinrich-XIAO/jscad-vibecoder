@@ -191,7 +191,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     axis: "x" | "y";
     kind: "pair" | "stackPrimary" | "stackSecondary";
     start: number;
-    stackPrimarySide?: "left" | "right";
     leftId?: PaneId;
     rightId?: PaneId;
     topId?: PaneId;
@@ -716,12 +715,11 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       axis: "x",
       kind: "stackPrimary",
       start: event.clientX,
-      stackPrimarySide: layoutMode === "rightStack" ? "right" : "left",
       startStackPrimaryRatio: stackPrimaryRatio,
       containerSize,
     };
     setIsResizing(true);
-  }, [layoutMode, stackPrimaryRatio]);
+  }, [stackPrimaryRatio]);
 
   const startStackSecondaryResize = useCallback((topId: PaneId, bottomId: PaneId, event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -784,8 +782,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
       if (activeResize.kind === "stackPrimary") {
         const startRatio = activeResize.startStackPrimaryRatio ?? stackPrimaryRatio;
-        const delta = activeResize.stackPrimarySide === "right" ? -deltaRatio : deltaRatio;
-        const next = Math.max(0.24, Math.min(0.76, startRatio + delta));
+        const next = Math.max(0.24, Math.min(0.76, startRatio + deltaRatio));
         setStackPrimaryRatio(next);
         return;
       }
