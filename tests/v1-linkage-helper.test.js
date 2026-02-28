@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { expect, test } from "bun:test";
 
 const require = createRequire(import.meta.url);
+const { booleans, measurements } = require("@jscad/modeling");
 
 function evalLib(filePath) {
   const code = readFileSync(filePath, "utf8").replace(
@@ -23,12 +24,20 @@ function evalLib(filePath) {
   );
 }
 
+let cachedCompat = null;
+
 function loadCompatAndMechanics() {
+  if (cachedCompat) return cachedCompat;
   const v1 = require("../public/jscad-libs/compat/v1.js");
   globalThis.window = globalThis;
   evalLib(resolve(process.cwd(), "public/jscad-libs/mechanics/gears.jscad"));
   evalLib(resolve(process.cwd(), "public/jscad-libs/mechanics/racks.jscad"));
-  return v1;
+  cachedCompat = v1;
+  return cachedCompat;
+}
+
+function rotationZFromTransform(transform) {
+  return (Math.atan2(-transform[4], transform[0]) * 180) / Math.PI;
 }
 
 test("v1 compat exports coord and linkage helpers", () => {
@@ -51,7 +60,7 @@ test("linkage returns prebuilt rack and pinion geometries", () => {
   );
 
   expect(Array.isArray(assembly)).toBe(true);
-  expect(assembly.length).toBe(2);
+  expect(assembly.length).toBeGreaterThanOrEqual(2);
   expect(assembly[0]).toBeTruthy();
   expect(assembly[1]).toBeTruthy();
   expect(Array.isArray(assembly[0].polygons)).toBe(true);
@@ -66,7 +75,7 @@ test("linkage works when rotation and translation motions are swapped", () => {
   );
 
   expect(Array.isArray(assembly)).toBe(true);
-  expect(assembly.length).toBe(2);
+  expect(assembly.length).toBeGreaterThanOrEqual(2);
 });
 
 test("linkage places the rack at its translated final pose", () => {
@@ -168,4 +177,63 @@ test("linkage interpolates rack and pinion poses from progress", () => {
   expect(end[0].transforms[12]).toBe(4);
   expect(mid[1].transforms).not.toEqual(start[1].transforms);
   expect(mid[1].transforms).not.toEqual(end[1].transforms);
+});
+
+test("linkage stock demo advances by one tooth from the library-derived baseline phase", () => {
+  const v1 = loadCompatAndMechanics();
+  const gear = globalThis.window.jscad.tspi.gear({}, 20, 8, 6, 1, 20);
+  const gearPhase = gear.getPhaseMetadata();
+  const rack = globalThis.window.jscad.tspi.rack({}, 0, 8, 1, 20, 20, 0, 2);
+  const rackPhase = rack.getPhaseMetadata();
+  const pitchRadius = gear.getPitchFeatures().pitchCircle.radius;
+  const baselinePhaseDeg =
+    (rackPhase.referenceToothCenterAtStart / pitchRadius) * (180 / Math.PI) +
+    gearPhase.initialToothPhaseOffsetDegrees;
+
+  const start = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 18) },
+    { progress: 0 }
+  );
+  const end = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 18) },
+    { progress: 1 }
+  );
+
+  expect(rotationZFromTransform(start[1].transforms)).toBeCloseTo(baselinePhaseDeg, 10);
+  expect(rotationZFromTransform(end[1].transforms) - rotationZFromTransform(start[1].transforms)).toBeCloseTo(18, 10);
+});
+
+test("linkage legacy y-translation demo keeps local tooth overlap below the old collision level", () => {
+  const v1 = loadCompatAndMechanics();
+  const { primitives } = require("@jscad/modeling");
+
+  const assembly = v1.linkage(
+    { initial: v1.coord(0, -2, 0), final: v1.coord(0, 2, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+  );
+
+  const contactWindow = primitives.cuboid({ size: [8, 8, 20], center: [10, 1, 0] });
+  const rackLocal = booleans.intersect(assembly[0], contactWindow);
+  const gearLocal = booleans.intersect(assembly[1], contactWindow);
+  const overlapVolume = measurements.measureVolume(booleans.intersect(rackLocal, gearLocal));
+
+  expect(overlapVolume).toBeLessThan(260);
+});
+
+test("linkage adds an extra gear when the requested rotation ratio mismatches the stock pinion", () => {
+  const v1 = loadCompatAndMechanics();
+
+  const mismatched = v1.linkage(
+    { initial: v1.coord(0, -2, 0), final: v1.coord(0, 2, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+  );
+  const matched = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 18) }
+  );
+
+  expect(mismatched.length).toBe(3);
+  expect(matched.length).toBe(2);
 });
