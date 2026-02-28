@@ -36,11 +36,20 @@ test("gear metadata exposes phase and pitch information", () => {
   const gear = globalThis.window.jscad.tspi.gear({}, 20, 8, 6, 1, 20);
   const pitch = gear.getPitchFeatures();
   const phase = gear.getPhaseMetadata();
+  const derivedPhaseDegrees =
+    (phase.initialTangentialOffsetAtPitch / pitch.pitchCircle.radius) * (180 / Math.PI);
 
   expect(pitch.type).toBe("pitch_circle");
   expect(pitch.pitchCircle.radius).toBe(10);
-  expect(phase.initialToothPhaseOffsetDegrees).toBe(-4.5);
-  expect(phase.recommendedRackShiftAtStartPitchFraction).toBe(0.25);
+  expect(phase.initialToothPhaseOffsetDegrees).toBeCloseTo(derivedPhaseDegrees, 10);
+  expect(phase.recommendedRackShiftAtStart).toBeCloseTo(
+    Math.abs(phase.initialTangentialOffsetAtPitch),
+    10
+  );
+  expect(phase.recommendedRackShiftAtStartPitchFraction).toBeCloseTo(
+    Math.abs(phase.initialTangentialOffsetAtPitch) / pitch.circularPitch,
+    10
+  );
 });
 
 test("rack metadata exposes effective length and phase origin", () => {

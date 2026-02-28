@@ -46,7 +46,7 @@ test("coord helper supports 3-arg and 6-arg form", () => {
 test("linkage returns prebuilt rack and pinion geometries", () => {
   const v1 = loadCompatAndMechanics();
   const assembly = v1.linkage(
-    { initial: v1.coord(0, -2, 0), final: v1.coord(0, 2, 0) },
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
     { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
   );
 
@@ -62,7 +62,7 @@ test("linkage works when rotation and translation motions are swapped", () => {
   const v1 = loadCompatAndMechanics();
   const assembly = v1.linkage(
     { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) },
-    { initial: v1.coord(0, -2, 0), final: v1.coord(0, 2, 0) }
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) }
   );
 
   expect(Array.isArray(assembly)).toBe(true);
