@@ -8,6 +8,7 @@ self.window = self;
 
 const remoteModuleCache = new Map();
 const evaluatingModules = new Set();
+let lastEvaluatedCode = null;
 
 function isRemoteSpec(path) {
   return /^https?:\/\//i.test(path);
@@ -179,7 +180,10 @@ self.onmessage = function(e) {
   
   if (type === 'evaluate') {
     try {
-      invalidateLocalModuleCache();
+      if (code !== lastEvaluatedCode) {
+        invalidateLocalModuleCache();
+        lastEvaluatedCode = code;
+      }
 
       // Main-file require/include implementation
       const require = function(path) {

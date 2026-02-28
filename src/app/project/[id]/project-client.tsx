@@ -172,6 +172,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [geometry, setGeometry] = useState<unknown[]>([]);
   const [error, setError] = useState<JscadExecutionError | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isManualRunPending, setIsManualRunPending] = useState(false);
   const [isSnapshotting, setIsSnapshotting] = useState(false);
   const [isProgressAnimating, setIsProgressAnimating] = useState(false);
   
@@ -537,7 +538,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   };
 
   const handleRun = useCallback(async () => {
-    await executeCode();
+    setIsManualRunPending(true);
+    try {
+      await executeCode();
+    } finally {
+      setIsManualRunPending(false);
+    }
   }, [executeCode]);
 
   const handlePromptComplete = useCallback(() => {
@@ -1440,12 +1446,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             onClick={() => {
               void handleRun();
             }}
-            disabled={isGenerating}
+            disabled={isManualRunPending}
             className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50"
             title="Run Code (Ctrl+Enter)"
           >
               <Play className="w-4 h-4" />
-              {isGenerating ? "Running..." : "Run"}
+              {isManualRunPending ? "Running..." : "Run"}
             </button>
           <button
             onClick={() => setShowExport(true)}
