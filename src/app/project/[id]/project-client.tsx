@@ -1285,9 +1285,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               <p className="text-xs text-muted-foreground">
                 {isPlaygroundProject ? "Unsaved guest project" : `${versions?.length || 0} versions`}
               </p>
-              {isPlaygroundProject && (
-                <p className="text-xs text-muted-foreground">Agents disabled</p>
-              )}
             </div>
           </div>
         </div>
