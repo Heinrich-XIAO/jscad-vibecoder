@@ -203,6 +203,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     startStackSecondaryRatio?: number;
     containerSize: number;
   } | null>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const hasAutoCompactedInitialLayoutRef = useRef(false);
 
   const { execute } = useJscadWorker();
@@ -270,6 +271,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       if (autosaveTimeoutRef.current) {
         clearTimeout(autosaveTimeoutRef.current);
       }
+      resizeCleanupRef.current?.();
     };
   }, []);
 
@@ -683,6 +685,106 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     }
   }, [clearPaneDrag, draggingPane]);
 
+  const updateResize = useCallback((clientX: number, clientY: number) => {
+    const activeResize = resizeRef.current;
+    if (!activeResize) return;
+
+    const currentPos = activeResize.axis === "x" ? clientX : clientY;
+    const deltaRatio = (currentPos - activeResize.start) / activeResize.containerSize;
+
+    if (activeResize.kind === "pair") {
+      if (!activeResize.leftId || !activeResize.rightId) return;
+      const leftId = activeResize.leftId;
+      const rightId = activeResize.rightId;
+      const startLeft = activeResize.startLeftRatio ?? 0;
+      const startRight = activeResize.startRightRatio ?? 0;
+      const pairTotal = startLeft + startRight;
+      const minLeft = (activeResize.axis === "x" ? MIN_PANE_WIDTH[leftId] : MIN_PANE_HEIGHT[leftId]) / activeResize.containerSize;
+      const minRight = (activeResize.axis === "x" ? MIN_PANE_WIDTH[rightId] : MIN_PANE_HEIGHT[rightId]) / activeResize.containerSize;
+      const minTotal = minLeft + minRight;
+      const minScale = minTotal > pairTotal && minTotal > 0 ? pairTotal / minTotal : 1;
+      const effectiveMinLeft = minLeft * minScale;
+      const effectiveMinRight = minRight * minScale;
+
+      let nextLeft = startLeft + deltaRatio;
+      nextLeft = Math.max(effectiveMinLeft, Math.min(pairTotal - effectiveMinRight, nextLeft));
+      const nextRight = pairTotal - nextLeft;
+
+      setPaneRatios((current) => {
+        const normalized = normalizeRatios(visiblePaneIds, current);
+        normalized[leftId] = nextLeft;
+        normalized[rightId] = nextRight;
+        return {
+          ...current,
+          ...normalized,
+        };
+      });
+      return;
+    }
+
+    if (activeResize.kind === "stackPrimary") {
+      const startRatio = activeResize.startStackPrimaryRatio ?? stackPrimaryRatio;
+      const next = Math.max(0.24, Math.min(0.76, startRatio + deltaRatio));
+      setStackPrimaryRatio(next);
+      return;
+    }
+
+    if (activeResize.kind === "stackSecondary") {
+      if (!activeResize.topId || !activeResize.bottomId) return;
+      const startRatio = activeResize.startStackSecondaryRatio ?? stackSecondaryRatio;
+      const minTop = MIN_PANE_HEIGHT[activeResize.topId] / activeResize.containerSize;
+      const minBottom = MIN_PANE_HEIGHT[activeResize.bottomId] / activeResize.containerSize;
+      const minTotal = minTop + minBottom;
+      const minScale = minTotal > 1 && minTotal > 0 ? 1 / minTotal : 1;
+      const effectiveMinTop = minTop * minScale;
+      const effectiveMinBottom = minBottom * minScale;
+      let next = startRatio + deltaRatio;
+      next = Math.max(effectiveMinTop, Math.min(1 - effectiveMinBottom, next));
+      setStackSecondaryRatio(next);
+    }
+  }, [stackPrimaryRatio, stackSecondaryRatio, visiblePaneIds]);
+
+  const stopResize = useCallback(() => {
+    resizeCleanupRef.current?.();
+    resizeCleanupRef.current = null;
+    resizeRef.current = null;
+    setIsResizing(false);
+  }, []);
+
+  const beginResize = useCallback((resizeState: NonNullable<typeof resizeRef.current>) => {
+    resizeCleanupRef.current?.();
+    resizeRef.current = resizeState;
+    setIsResizing(true);
+
+    const handlePointerMove = (event: PointerEvent) => {
+      updateResize(event.clientX, event.clientY);
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      updateResize(event.clientX, event.clientY);
+    };
+
+    const handlePointerUp = () => {
+      stopResize();
+    };
+
+    const handleMouseUp = () => {
+      stopResize();
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    resizeCleanupRef.current = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [stopResize, updateResize]);
+
   const startPairResize = useCallback((axis: "x" | "y", firstId: PaneId, secondId: PaneId, event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     const container = layoutRef.current;
@@ -691,7 +793,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     if (containerSize <= 0) return;
 
     const ratios = normalizeRatios(visiblePaneIds, paneRatios);
-    resizeRef.current = {
+    beginResize({
       axis,
       kind: "pair",
       start: axis === "x" ? event.clientX : event.clientY,
@@ -700,9 +802,8 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       startLeftRatio: ratios[firstId] ?? 0,
       startRightRatio: ratios[secondId] ?? 0,
       containerSize,
-    };
-    setIsResizing(true);
-  }, [paneRatios, visiblePaneIds]);
+    });
+  }, [beginResize, paneRatios, visiblePaneIds]);
 
   const startStackPrimaryResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -710,15 +811,14 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     if (!container) return;
     const containerSize = container.clientWidth;
     if (containerSize <= 0) return;
-    resizeRef.current = {
+    beginResize({
       axis: "x",
       kind: "stackPrimary",
       start: event.clientX,
       startStackPrimaryRatio: stackPrimaryRatio,
       containerSize,
-    };
-    setIsResizing(true);
-  }, [stackPrimaryRatio]);
+    });
+  }, [beginResize, stackPrimaryRatio]);
 
   const startStackSecondaryResize = useCallback((topId: PaneId, bottomId: PaneId, event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -727,7 +827,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     const containerSize = container.clientHeight;
     if (containerSize <= 0) return;
 
-    resizeRef.current = {
+    beginResize({
       axis: "y",
       kind: "stackSecondary",
       start: event.clientY,
@@ -735,84 +835,8 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       bottomId,
       startStackSecondaryRatio: stackSecondaryRatio,
       containerSize,
-    };
-    setIsResizing(true);
-  }, [stackSecondaryRatio]);
-
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const activeResize = resizeRef.current;
-      if (!activeResize) return;
-
-      const currentPos = activeResize.axis === "x" ? event.clientX : event.clientY;
-      const deltaRatio = (currentPos - activeResize.start) / activeResize.containerSize;
-
-      if (activeResize.kind === "pair") {
-        if (!activeResize.leftId || !activeResize.rightId) return;
-        const leftId = activeResize.leftId;
-        const rightId = activeResize.rightId;
-        const startLeft = activeResize.startLeftRatio ?? 0;
-        const startRight = activeResize.startRightRatio ?? 0;
-        const pairTotal = startLeft + startRight;
-        const minLeft = (activeResize.axis === "x" ? MIN_PANE_WIDTH[leftId] : MIN_PANE_HEIGHT[leftId]) / activeResize.containerSize;
-        const minRight = (activeResize.axis === "x" ? MIN_PANE_WIDTH[rightId] : MIN_PANE_HEIGHT[rightId]) / activeResize.containerSize;
-        const minTotal = minLeft + minRight;
-        const minScale = minTotal > pairTotal && minTotal > 0 ? pairTotal / minTotal : 1;
-        const effectiveMinLeft = minLeft * minScale;
-        const effectiveMinRight = minRight * minScale;
-
-        let nextLeft = startLeft + deltaRatio;
-        nextLeft = Math.max(effectiveMinLeft, Math.min(pairTotal - effectiveMinRight, nextLeft));
-        const nextRight = pairTotal - nextLeft;
-
-        setPaneRatios((current) => {
-          const normalized = normalizeRatios(visiblePaneIds, current);
-          normalized[leftId] = nextLeft;
-          normalized[rightId] = nextRight;
-          return {
-            ...current,
-            ...normalized,
-          };
-        });
-        return;
-      }
-
-      if (activeResize.kind === "stackPrimary") {
-        const startRatio = activeResize.startStackPrimaryRatio ?? stackPrimaryRatio;
-        const next = Math.max(0.24, Math.min(0.76, startRatio + deltaRatio));
-        setStackPrimaryRatio(next);
-        return;
-      }
-
-      if (activeResize.kind === "stackSecondary") {
-        if (!activeResize.topId || !activeResize.bottomId) return;
-        const startRatio = activeResize.startStackSecondaryRatio ?? stackSecondaryRatio;
-        const minTop = MIN_PANE_HEIGHT[activeResize.topId] / activeResize.containerSize;
-        const minBottom = MIN_PANE_HEIGHT[activeResize.bottomId] / activeResize.containerSize;
-        const minTotal = minTop + minBottom;
-        const minScale = minTotal > 1 && minTotal > 0 ? 1 / minTotal : 1;
-        const effectiveMinTop = minTop * minScale;
-        const effectiveMinBottom = minBottom * minScale;
-        let next = startRatio + deltaRatio;
-        next = Math.max(effectiveMinTop, Math.min(1 - effectiveMinBottom, next));
-        setStackSecondaryRatio(next);
-      }
-    };
-
-    const handlePointerUp = () => {
-      resizeRef.current = null;
-      setIsResizing(false);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    };
-  }, [isResizing, visiblePaneIds]);
+    });
+  }, [beginResize, stackSecondaryRatio]);
 
   // Keyboard shortcuts - must be defined after all handler functions
   const shortcuts: KeyboardShortcut[] = useMemo(
@@ -1314,7 +1338,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
                   className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
                   onMouseDown={startStackPrimaryResize}
                 />
-                <div style={{ flexBasis: 0, flexGrow: 1 - stackPrimaryRatio, flexShrink: 1 }} className="min-h-0 flex flex-col">
+                <div style={{ flexBasis: 0, flexGrow: 1 - stackPrimaryRatio, flexShrink: 1 }} className="min-w-0 min-h-0 flex flex-col">
                   {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 })}
                   <div
                     className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
@@ -1330,7 +1354,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             const [topPane, bottomPane, rightPane] = ordered;
             return (
               <div className="flex-1 min-h-0 flex">
-                <div style={{ flexBasis: 0, flexGrow: stackPrimaryRatio, flexShrink: 1 }} className="min-h-0 flex flex-col">
+                <div style={{ flexBasis: 0, flexGrow: stackPrimaryRatio, flexShrink: 1 }} className="min-w-0 min-h-0 flex flex-col">
                   {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 })}
                   <div
                     className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
