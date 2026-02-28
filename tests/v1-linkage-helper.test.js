@@ -40,6 +40,11 @@ function rotationZFromTransform(transform) {
   return (Math.atan2(-transform[4], transform[0]) * 180) / Math.PI;
 }
 
+function widthX(geometry) {
+  const bounds = measurements.measureBoundingBox(geometry);
+  return bounds[1][0] - bounds[0][0];
+}
+
 test("v1 compat exports coord and linkage helpers", () => {
   const v1 = require("../public/jscad-libs/compat/v1.js");
   expect(typeof v1.coord).toBe("function");
@@ -222,7 +227,7 @@ test("linkage legacy y-translation demo keeps local tooth overlap below the old 
   expect(overlapVolume).toBeLessThan(260);
 });
 
-test("linkage adds an extra gear when the requested rotation ratio mismatches the stock pinion", () => {
+test("linkage adds a two-gear stage and resizes the main gear when the ratio mismatches", () => {
   const v1 = loadCompatAndMechanics();
 
   const mismatched = v1.linkage(
@@ -234,6 +239,9 @@ test("linkage adds an extra gear when the requested rotation ratio mismatches th
     { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 18) }
   );
 
-  expect(mismatched.length).toBe(3);
+  expect(mismatched.length).toBe(4);
   expect(matched.length).toBe(2);
+  expect(rotationZFromTransform(mismatched[1].transforms)).toBeGreaterThan(0);
+  expect(rotationZFromTransform(mismatched[3].transforms)).toBeGreaterThan(0);
+  expect(widthX(mismatched[3])).not.toBeCloseTo(widthX(matched[1]), 10);
 });

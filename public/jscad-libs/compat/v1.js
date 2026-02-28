@@ -244,6 +244,81 @@ const liftPhaseEquivalentAngle = (phaseAngleDeg, preferredAngleDeg, periodDeg) =
   return phaseAngleDeg + Math.round((preferredAngleDeg - phaseAngleDeg) / periodDeg) * periodDeg;
 };
 
+const buildGearPart = (
+  mechanics,
+  printerSettings,
+  pitchDiameter,
+  teethNumber,
+  pressureAngle,
+  thickness = 8,
+  boreDiameter = 6
+) => {
+  if (typeof mechanics?.involuteGearByPitchDiameterTeeth === "function") {
+    return mechanics.involuteGearByPitchDiameterTeeth(
+      printerSettings,
+      pitchDiameter,
+      teethNumber,
+      pressureAngle,
+      thickness,
+      boreDiameter / 2
+    );
+  }
+  return mechanics.gear(
+    printerSettings,
+    pitchDiameter,
+    thickness,
+    boreDiameter,
+    pitchDiameter / Math.max(teethNumber, 1),
+    pressureAngle
+  );
+};
+
+const getPartModel = (part) => (typeof part?.getModel === "function" ? part.getModel() : part);
+
+const getPitchFeatures = (part) =>
+  typeof part?.getPitchFeatures === "function" ? part.getPitchFeatures() : null;
+
+const getPhaseMetadata = (part) =>
+  typeof part?.getPhaseMetadata === "function" ? part.getPhaseMetadata() : null;
+
+const computeRackMeshedRotation = ({
+  gearPart,
+  centerX,
+  rackX,
+  rackPhaseOriginX,
+  rackReferenceToothCenterAtStart,
+  preferredAngleDeg,
+}) => {
+  const gearPitch = getPitchFeatures(gearPart);
+  const pitchRadius = toFiniteNumber(gearPitch?.pitchCircle?.radius, 0);
+  const teethNumber = Math.max(1, Math.round(toFiniteNumber(gearPitch?.teethNumber, 20)));
+  if (Math.abs(pitchRadius) <= EPSILON) return preferredAngleDeg;
+
+  const contactXInRackFrame = centerX - rackX - rackPhaseOriginX;
+  const baselineMeshRotationDeg =
+    (rackReferenceToothCenterAtStart / pitchRadius) * (180 / Math.PI);
+  const phaseAngleDeg =
+    baselineMeshRotationDeg - (contactXInRackFrame / pitchRadius) * (180 / Math.PI);
+  return liftPhaseEquivalentAngle(phaseAngleDeg, preferredAngleDeg, 360 / teethNumber);
+};
+
+const computeMeshedFollowerAngle = ({
+  driverAngleDeg,
+  driverPart,
+  followerPart,
+}) => {
+  const driverPitch = getPitchFeatures(driverPart);
+  const followerPitch = getPitchFeatures(followerPart);
+  const driverTeeth = Math.max(1, Math.round(toFiniteNumber(driverPitch?.teethNumber, 20)));
+  const followerTeeth = Math.max(1, Math.round(toFiniteNumber(followerPitch?.teethNumber, 20)));
+  const driverPhase = toFiniteNumber(getPhaseMetadata(driverPart)?.initialToothPhaseOffsetDegrees, 0);
+  const followerPhase = toFiniteNumber(
+    getPhaseMetadata(followerPart)?.initialToothPhaseOffsetDegrees,
+    0
+  );
+  return followerPhase - ((driverAngleDeg - driverPhase) * driverTeeth) / followerTeeth;
+};
+
 const linkage = (motionA, motionB, options = {}) => {
   const probe = (motion) => ({
     initial: normalizeCoord(motion?.initial),
@@ -314,22 +389,16 @@ const linkage = (motionA, motionB, options = {}) => {
   const rackPart = mechanics.rack(defaultPrinterSettings);
   const pinionPart = mechanics.gear(defaultPrinterSettings);
 
-  const rackModel = typeof rackPart?.getModel === "function" ? rackPart.getModel() : rackPart;
-  const pinionModel = typeof pinionPart?.getModel === "function" ? pinionPart.getModel() : pinionPart;
+  const rackModel = getPartModel(rackPart);
+  const pinionModel = getPartModel(pinionPart);
 
-  const pitchRadius =
-    typeof pinionPart?.getPitchFeatures === "function"
-      ? toFiniteNumber(pinionPart.getPitchFeatures()?.pitchCircle?.radius, 0)
-      : 0;
-  const pinionPitch = typeof pinionPart?.getPitchFeatures === "function"
-    ? pinionPart.getPitchFeatures()
-    : null;
+  const pinionPitch = getPitchFeatures(pinionPart);
+  const pitchRadius = toFiniteNumber(pinionPitch?.pitchCircle?.radius, 0);
   const pinionModule = toFiniteNumber(pinionPitch?.module, 1);
   const pinionPressureAngle = toFiniteNumber(pinionPitch?.pressureAngle, 20);
   const pinionTeethNumber = Math.max(1, Math.round(toFiniteNumber(pinionPitch?.teethNumber, 20)));
 
-  const rackPhase =
-    typeof rackPart?.getPhaseMetadata === "function" ? rackPart.getPhaseMetadata() : null;
+  const rackPhase = getPhaseMetadata(rackPart);
   const rackReferenceToothCenterAtStart = toFiniteNumber(rackPhase?.referenceToothCenterAtStart, 0);
   const rackPhaseOriginX = toFiniteNumber(rackPhase?.phaseOrigin?.[0], 0);
 
@@ -382,12 +451,118 @@ const linkage = (motionA, motionB, options = {}) => {
     Math.abs(pitchRadius) > EPSILON
       ? (Math.abs(totalRackTravel) / pitchRadius) * (180 / Math.PI) * linkedRotationSign
       : 0;
+  const desiredMainRotationTotalDeg = totalObservedRotationDeltaOnDominantAxis;
   const ratioMismatch =
     rotation.axis === "rotZ" &&
-    Math.abs(totalObservedRotationDeltaOnDominantAxis) > EPSILON &&
+    Math.abs(desiredMainRotationTotalDeg) > EPSILON &&
     Math.abs(desiredPinionRotationTotalDeg) > EPSILON &&
-    Math.abs(Math.abs(totalObservedRotationDeltaOnDominantAxis) - Math.abs(desiredPinionRotationTotalDeg)) >
+    Math.abs(Math.abs(desiredMainRotationTotalDeg) - Math.abs(desiredPinionRotationTotalDeg)) >
       0.75;
+
+  const positionedRack = applyPose(rackModel, alignedRackPose);
+  const assembly = [unwrapGeometry(positionedRack)];
+
+  if (ratioMismatch) {
+    const stageTeethNumber = 8;
+    const mainTeethNumber = Math.max(
+      6,
+      Math.round(
+        (2 * Math.abs(totalRackTravel)) /
+          (pinionModule * degToRad(Math.max(Math.abs(desiredMainRotationTotalDeg), EPSILON)))
+      )
+    );
+    const mainPart = buildGearPart(
+      mechanics,
+      defaultPrinterSettings,
+      mainTeethNumber * pinionModule,
+      mainTeethNumber,
+      pinionPressureAngle
+    );
+    const mainPitch = getPitchFeatures(mainPart);
+    const mainPitchRadius = toFiniteNumber(mainPitch?.pitchCircle?.radius, (mainTeethNumber * pinionModule) / 2);
+
+    const rackDriverPart = buildGearPart(
+      mechanics,
+      defaultPrinterSettings,
+      stageTeethNumber * pinionModule,
+      stageTeethNumber,
+      pinionPressureAngle
+    );
+    const rackDriverPitch = getPitchFeatures(rackDriverPart);
+    const rackDriverPitchRadius = toFiniteNumber(
+      rackDriverPitch?.pitchCircle?.radius,
+      (stageTeethNumber * pinionModule) / 2
+    );
+    const rackDriverTeethNumber = Math.max(
+      1,
+      Math.round(toFiniteNumber(rackDriverPitch?.teethNumber, stageTeethNumber))
+    );
+
+    const idlerPart = buildGearPart(
+      mechanics,
+      defaultPrinterSettings,
+      rackDriverTeethNumber * pinionModule,
+      rackDriverTeethNumber,
+      pinionPressureAngle
+    );
+    const idlerPitch = getPitchFeatures(idlerPart);
+    const idlerPitchRadius = toFiniteNumber(
+      idlerPitch?.pitchCircle?.radius,
+      (rackDriverTeethNumber * pinionModule) / 2
+    );
+
+    const rackDriverAngleDeg = computeRackMeshedRotation({
+      gearPart: rackDriverPart,
+      centerX: rotationSourceInitial.x,
+      rackX: alignedRackPose.x,
+      rackPhaseOriginX,
+      rackReferenceToothCenterAtStart,
+      preferredAngleDeg:
+        (Math.abs(currentRackTravel) / Math.max(rackDriverPitchRadius, EPSILON)) *
+        (180 / Math.PI) *
+        linkedRotationSign,
+    });
+    const idlerAngleDeg = computeMeshedFollowerAngle({
+      driverAngleDeg: rackDriverAngleDeg,
+      driverPart: rackDriverPart,
+      followerPart: idlerPart,
+    });
+    const mainAngleDeg = computeMeshedFollowerAngle({
+      driverAngleDeg: idlerAngleDeg,
+      driverPart: idlerPart,
+      followerPart: mainPart,
+    });
+
+    const rackDriverPose = {
+      x: rotationSourceInitial.x,
+      y: alignedRackPose.y + rackDriverPitchRadius + DEFAULT_RACK_PINION_GAP,
+      z: rotationSourceInitial.z,
+      rotX: 0,
+      rotY: 0,
+      rotZ: rackDriverAngleDeg,
+    };
+    const idlerPose = {
+      x: rotationSourceInitial.x,
+      y: rackDriverPose.y + rackDriverPitchRadius + idlerPitchRadius,
+      z: rotationSourceInitial.z,
+      rotX: 0,
+      rotY: 0,
+      rotZ: idlerAngleDeg,
+    };
+    const mainPose = {
+      x: rotationSourceInitial.x,
+      y: idlerPose.y + idlerPitchRadius + mainPitchRadius,
+      z: rotationSourceInitial.z,
+      rotX: rotationDelta.rotX,
+      rotY: rotationDelta.rotY,
+      rotZ: mainAngleDeg,
+    };
+
+    assembly.push(unwrapGeometry(applyPose(getPartModel(rackDriverPart), rackDriverPose)));
+    assembly.push(unwrapGeometry(applyPose(getPartModel(idlerPart), idlerPose)));
+    assembly.push(unwrapGeometry(applyPose(getPartModel(mainPart), mainPose)));
+    return assembly;
+  }
 
   const alignedPinionPose = {
     ...rotationSourceInitial,
@@ -396,41 +571,8 @@ const linkage = (motionA, motionB, options = {}) => {
     rotY: rotationDelta.rotY,
     rotZ: rotationDelta.rotZ,
   };
-
-  const positionedRack = applyPose(rackModel, alignedRackPose);
   const positionedPinion = applyPose(pinionModel, alignedPinionPose);
-  const assembly = [unwrapGeometry(positionedRack), unwrapGeometry(positionedPinion)];
-
-  if (ratioMismatch) {
-    const targetRatio = Math.abs(desiredPinionRotationTotalDeg / totalObservedRotationDeltaOnDominantAxis);
-    const driverTeethNumber = Math.max(6, Math.round(pinionTeethNumber * targetRatio));
-    const driverPitchDiameter = driverTeethNumber * pinionModule;
-    const driverPart = mechanics.gear(
-      defaultPrinterSettings,
-      driverPitchDiameter,
-      8,
-      6,
-      pinionModule,
-      pinionPressureAngle
-    );
-    const driverModel =
-      typeof driverPart?.getModel === "function" ? driverPart.getModel() : driverPart;
-    const driverPitchRadius =
-      typeof driverPart?.getPitchFeatures === "function"
-        ? toFiniteNumber(driverPart.getPitchFeatures()?.pitchCircle?.radius, driverPitchDiameter / 2)
-        : driverPitchDiameter / 2;
-
-    const driverPose = {
-      x: rotationSourceInitial.x - (driverPitchRadius + pitchRadius),
-      y: alignedPinionPose.y,
-      z: rotationSourceInitial.z,
-      rotX: 0,
-      rotY: 0,
-      rotZ: observedRotationDeltaOnDominantAxis,
-    };
-
-    assembly.push(unwrapGeometry(applyPose(driverModel, driverPose)));
-  }
+  assembly.push(unwrapGeometry(positionedPinion));
 
   return assembly;
 };
