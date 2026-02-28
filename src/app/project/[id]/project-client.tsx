@@ -532,6 +532,9 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     if (newCode.trim() === "" && code.trim() !== "") {
       return;
     }
+    if (isProgressAnimating) {
+      stopAndResetProgressAnimation();
+    }
     setCode(newCode);
   };
 
@@ -550,6 +553,19 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
   const stopProgressAnimation = useCallback(() => {
     setIsProgressAnimating(false);
+  }, []);
+
+  const stopAndResetProgressAnimation = useCallback(() => {
+    setIsProgressAnimating(false);
+    setParameters((prev) => {
+      if (prev[PROGRESS_PARAM_NAME] === undefined) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [PROGRESS_PARAM_NAME]: 0,
+      };
+    });
   }, []);
 
   const handleToggleProgressAnimation = useCallback(() => {

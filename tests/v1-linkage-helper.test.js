@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { expect, test } from "bun:test";
 
 const require = createRequire(import.meta.url);
-const { booleans, measurements } = require("@jscad/modeling");
+const { measurements } = require("@jscad/modeling");
 
 function evalLib(filePath) {
   const code = readFileSync(filePath, "utf8").replace(
@@ -40,8 +40,12 @@ function rotationZFromTransform(transform) {
   return (Math.atan2(-transform[4], transform[0]) * 180) / Math.PI;
 }
 
+function bbox(geometry) {
+  return measurements.measureBoundingBox(geometry);
+}
+
 function widthX(geometry) {
-  const bounds = measurements.measureBoundingBox(geometry);
+  const bounds = bbox(geometry);
   return bounds[1][0] - bounds[0][0];
 }
 
@@ -57,203 +61,212 @@ test("coord helper supports 3-arg and 6-arg form", () => {
   expect(v1.coord(1, 2, 3, 4, 5, 6)).toEqual([1, 2, 3, 4, 5, 6]);
 });
 
-test("linkage returns prebuilt rack and pinion geometries", () => {
+test("linkage keeps rack first and output gear last", () => {
   const v1 = loadCompatAndMechanics();
   const assembly = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 25, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 25, 0, 0, 0, 18) }
   );
 
   expect(Array.isArray(assembly)).toBe(true);
   expect(assembly.length).toBeGreaterThanOrEqual(2);
-  expect(assembly[0]).toBeTruthy();
-  expect(assembly[1]).toBeTruthy();
   expect(Array.isArray(assembly[0].polygons)).toBe(true);
-  expect(Array.isArray(assembly[1].polygons)).toBe(true);
+  expect(Array.isArray(assembly[assembly.length - 1].polygons)).toBe(true);
 });
 
 test("linkage works when rotation and translation motions are swapped", () => {
   const v1 = loadCompatAndMechanics();
   const assembly = v1.linkage(
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) },
-    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) }
+    { initial: v1.coord(10, 0, 0, 0, 0, 18), final: v1.coord(10, 0, 0, 0, 0, 36) },
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) }
   );
 
   expect(Array.isArray(assembly)).toBe(true);
   expect(assembly.length).toBeGreaterThanOrEqual(2);
 });
 
-test("linkage places the rack at its translated final pose", () => {
+test("linkage preserves the rack endpoint pose exactly", () => {
   const v1 = loadCompatAndMechanics();
   const assembly = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+    { initial: v1.coord(5 * Math.PI, 20, 3), final: v1.coord(-5 * Math.PI, 20, 3) },
+    { initial: v1.coord(3 * Math.PI, 0, 7, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 7, 0, 0, 180) }
   );
 
-  expect(Array.isArray(assembly[0].transforms)).toBe(true);
-  expect(assembly[0].transforms[12]).toBe(4);
-  expect(assembly[0].transforms[13]).toBe(0);
+  expect(assembly[0].transforms[12]).toBeCloseTo(-5 * Math.PI, 10);
+  expect(assembly[0].transforms[13]).toBeCloseTo(20, 10);
+  expect(assembly[0].transforms[14]).toBeCloseTo(3, 10);
 });
 
-test("linkage drives pinion rotation from rack travel for the stock demo geometry", () => {
+test("linkage preserves the output endpoint pose exactly", () => {
   const v1 = loadCompatAndMechanics();
-  const fromSmallRotation = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 20) }
+  const assembly = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 25, 4, 0, 0, 0), final: v1.coord(3 * Math.PI, 25, 4, 0, 0, 18) }
   );
-  const fromLargeRotation = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
-  );
+  const output = assembly[assembly.length - 1];
 
-  expect(fromSmallRotation[1].transforms).toEqual(fromLargeRotation[1].transforms);
+  expect(output.transforms[12]).toBeCloseTo(3 * Math.PI, 10);
+  expect(output.transforms[13]).toBeCloseTo(25, 10);
+  expect(output.transforms[14]).toBeCloseTo(4, 10);
 });
 
-test("linkage rotates pinion phase to match rack position", () => {
+test("linkage does not move the rack when only the gear y input changes", () => {
   const v1 = loadCompatAndMechanics();
-
-  const phaseA = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
-  );
-  const phaseB = v1.linkage(
-    { initial: v1.coord(1, 0, 0), final: v1.coord(5, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
-  );
-
-  expect(Array.isArray(phaseA[1].transforms)).toBe(true);
-  expect(Array.isArray(phaseB[1].transforms)).toBe(true);
-  expect(phaseA[1].transforms).not.toEqual(phaseB[1].transforms);
-});
-
-test("linkage treats rotation input as delta, not absolute angle", () => {
-  const v1 = loadCompatAndMechanics();
-
   const base = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+    { initial: v1.coord(5 * Math.PI, 0, 0), final: v1.coord(-5 * Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 180) }
   );
-  const offsetAngles = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 120), final: v1.coord(10, 0, 0, 0, 0, 170) }
+  const shifted = v1.linkage(
+    { initial: v1.coord(5 * Math.PI, 0, 0), final: v1.coord(-5 * Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 2, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 2, 0, 0, 0, 180) }
   );
 
-  expect(base[1].transforms).toEqual(offsetAngles[1].transforms);
+  expect(shifted[0].transforms[13] - base[0].transforms[13]).toBeCloseTo(0, 10);
+  expect(
+    shifted[shifted.length - 1].transforms[13] - base[base.length - 1].transforms[13]
+  ).toBeCloseTo(2, 10);
 });
 
-test("linkage defaults omitted progress to the final pose", () => {
+test("linkage does not move the output when only the rack y input changes", () => {
   const v1 = loadCompatAndMechanics();
-
-  const implicitFinal = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+  const base = v1.linkage(
+    { initial: v1.coord(5 * Math.PI, 0, 0), final: v1.coord(-5 * Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 180) }
   );
-  const explicitFinal = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) },
-    { progress: 1 }
+  const shifted = v1.linkage(
+    { initial: v1.coord(5 * Math.PI, 20, 0), final: v1.coord(-5 * Math.PI, 20, 0) },
+    { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 180) }
   );
 
-  expect(implicitFinal[0].transforms).toEqual(explicitFinal[0].transforms);
-  expect(implicitFinal[1].transforms).toEqual(explicitFinal[1].transforms);
+  expect(shifted[0].transforms[13] - base[0].transforms[13]).toBeCloseTo(20, 10);
+  expect(
+    shifted[shifted.length - 1].transforms[13] - base[base.length - 1].transforms[13]
+  ).toBeCloseTo(0, 10);
 });
 
-test("linkage interpolates rack and pinion poses from progress", () => {
+test("linkage treats output rotation as an authoritative endpoint pose", () => {
   const v1 = loadCompatAndMechanics();
+  const base = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 10, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 10, 0, 0, 0, 18) }
+  );
+  const offset = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 10, 0, 0, 0, 120), final: v1.coord(3 * Math.PI, 10, 0, 0, 0, 138) }
+  );
 
+  expect(
+    rotationZFromTransform(offset[offset.length - 1].transforms) -
+      rotationZFromTransform(base[base.length - 1].transforms)
+  ).toBeCloseTo(120, 10);
+});
+
+test("linkage interpolates rack translation and output rotation from progress", () => {
+  const v1 = loadCompatAndMechanics();
   const start = v1.linkage(
     { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) },
+    { initial: v1.coord(10, 10, 0, 0, 0, 0), final: v1.coord(10, 10, 0, 0, 0, 50) },
     { progress: 0 }
   );
   const mid = v1.linkage(
     { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) },
+    { initial: v1.coord(10, 10, 0, 0, 0, 0), final: v1.coord(10, 10, 0, 0, 0, 50) },
     { progress: 0.5 }
   );
   const end = v1.linkage(
     { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) },
+    { initial: v1.coord(10, 10, 0, 0, 0, 0), final: v1.coord(10, 10, 0, 0, 0, 50) },
     { progress: 1 }
   );
 
-  expect(start[0].transforms[12]).toBe(0);
-  expect(mid[0].transforms[12]).toBe(2);
-  expect(end[0].transforms[12]).toBe(4);
-  expect(mid[1].transforms).not.toEqual(start[1].transforms);
-  expect(mid[1].transforms).not.toEqual(end[1].transforms);
+  expect(start[0].transforms[12]).toBeCloseTo(0, 10);
+  expect(mid[0].transforms[12]).toBeCloseTo(2, 10);
+  expect(end[0].transforms[12]).toBeCloseTo(4, 10);
+  expect(
+    rotationZFromTransform(mid[mid.length - 1].transforms) -
+      rotationZFromTransform(start[start.length - 1].transforms)
+  ).toBeCloseTo(25, 10);
+  expect(
+    rotationZFromTransform(end[end.length - 1].transforms) -
+      rotationZFromTransform(start[start.length - 1].transforms)
+  ).toBeCloseTo(50, 10);
 });
 
-test("linkage stock demo advances by one tooth and keeps local overlap below the old collision level", () => {
+test("linkage uses a direct two-part mesh when fixed poses are directly meshable", () => {
   const v1 = loadCompatAndMechanics();
-  const { primitives } = require("@jscad/modeling");
-
-  const start = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
-    { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 18) },
-    { progress: 0 }
-  );
-  const end = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
-    { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 18) },
-    { progress: 1 }
-  );
-  const startAngle = rotationZFromTransform(start[1].transforms);
-  const endAngle = rotationZFromTransform(end[1].transforms);
-  const contactWindow = primitives.cuboid({ size: [8, 8, 20], center: [3 * Math.PI, 1, 0] });
-  const rackLocal = booleans.intersect(start[0], contactWindow);
-  const gearLocal = booleans.intersect(start[1], contactWindow);
-  const overlapVolume = measurements.measureVolume(booleans.intersect(rackLocal, gearLocal));
-
-  expect(endAngle - startAngle).toBeCloseTo(18, 10);
-  expect(overlapVolume).toBeLessThan(350);
-});
-
-test("linkage legacy y-translation demo keeps local tooth overlap below the old collision level", () => {
-  const v1 = loadCompatAndMechanics();
-  const { primitives } = require("@jscad/modeling");
-
   const assembly = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, -10, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, -10, 0, 0, 0, -18) }
+  );
+
+  expect(assembly.length).toBe(2);
+  expect(assembly[assembly.length - 1].transforms[13]).toBeCloseTo(-10, 10);
+});
+
+test("linkage reflects the rack when the gear is below it", () => {
+  const v1 = loadCompatAndMechanics();
+  const above = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 10, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 10, 0, 0, 0, 18) }
+  );
+  const below = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, -10, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, -10, 0, 0, 0, -18) }
+  );
+  const aboveBounds = bbox(above[0]);
+  const belowBounds = bbox(below[0]);
+
+  expect(aboveBounds[1][1]).toBeGreaterThan(0.9);
+  expect(belowBounds[0][1]).toBeLessThan(-0.9);
+});
+
+test("linkage inserts the minimum train needed for a fixed output pose", () => {
+  const v1 = loadCompatAndMechanics();
+  const ratioMismatch = v1.linkage(
     { initial: v1.coord(0, -2, 0), final: v1.coord(0, 2, 0) },
     { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
   );
-
-  const contactWindow = primitives.cuboid({ size: [8, 8, 20], center: [10, 1, 0] });
-  const rackLocal = booleans.intersect(assembly[0], contactWindow);
-  const gearLocal = booleans.intersect(assembly[1], contactWindow);
-  const overlapVolume = measurements.measureVolume(booleans.intersect(rackLocal, gearLocal));
-
-  expect(overlapVolume).toBeLessThan(260);
-});
-
-test("linkage adds a two-gear stage and resizes the main gear when the ratio mismatches", () => {
-  const v1 = loadCompatAndMechanics();
-
-  const mismatched = v1.linkage(
-    { initial: v1.coord(0, -2, 0), final: v1.coord(0, 2, 0) },
-    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
-  );
-  const matched = v1.linkage(
-    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
-    { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 18) }
-  );
-
-  expect(mismatched.length).toBe(4);
-  expect(matched.length).toBe(2);
-  expect(rotationZFromTransform(mismatched[1].transforms)).toBeGreaterThan(0);
-  expect(rotationZFromTransform(mismatched[3].transforms)).toBeGreaterThan(0);
-  expect(widthX(mismatched[3])).not.toBeCloseTo(widthX(matched[1]), 10);
-});
-
-test("linkage adds a reversing stage when requested output direction disagrees with rack travel", () => {
-  const v1 = loadCompatAndMechanics();
-
-  const assembly = v1.linkage(
+  const reversalOnly = v1.linkage(
     { initial: v1.coord(10 * Math.PI, 0, 0), final: v1.coord(0, 0, 0) },
     { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 180) }
   );
+  const sameSignNeedsIdler = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 25, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 25, 0, 0, 0, 18) }
+  );
 
-  expect(assembly.length).toBe(4);
-  expect(rotationZFromTransform(assembly[1].transforms)).toBeLessThan(0);
-  expect(rotationZFromTransform(assembly[3].transforms)).toBeGreaterThan(0);
+  expect(ratioMismatch.length).toBe(3);
+  expect(reversalOnly.length).toBe(3);
+  expect(sameSignNeedsIdler.length).toBe(4);
+  expect(sameSignNeedsIdler[sameSignNeedsIdler.length - 1].transforms[13]).toBeCloseTo(25, 10);
+});
+
+test("linkage can resize the fixed output gear while keeping it at the requested pose", () => {
+  const v1 = loadCompatAndMechanics();
+  const direct = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, -10, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, -10, 0, 0, 0, -18) }
+  );
+  const resized = v1.linkage(
+    { initial: v1.coord(0, -2, 0), final: v1.coord(0, 2, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+  );
+
+  expect(widthX(resized[resized.length - 1])).not.toBeCloseTo(widthX(direct[1]), 10);
+  expect(resized[resized.length - 1].transforms[12]).toBeCloseTo(0, 10);
+  expect(resized[resized.length - 1].transforms[13]).toBeCloseTo(0, 10);
+});
+
+test("linkage returns an explicit failure for unsupported zero-rotation input", () => {
+  const v1 = loadCompatAndMechanics();
+  const result = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 10, 0, 0, 0, 0), final: v1.coord(10, 10, 0, 0, 0, 0) }
+  );
+
+  expect(result).toEqual(
+    expect.objectContaining({
+      success: false,
+    })
+  );
 });
