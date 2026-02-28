@@ -23,7 +23,7 @@
  
 ## Commit & Push Policy (project-local override)
 * After finishing a requested code change or feature, the agent SHOULD create a commit and push it to the repository remote so changes are persisted and visible to collaborators.
-  - When committing, always commit only the changes YOU made.
+  - When committing, you MAY commit while other unrelated changes exist in the working tree, but you must stage and commit only the changes YOU made.
   - This is a project-level override to the default agent behavior; use with caution.
   - Agents must double-check `git status` before staging to confirm only their files are included and no unrelated changes slip into the commit.
   - Pushes must never be forced or involve git config changes. If a push is rejected because the remote changed, stop and notify a human.
