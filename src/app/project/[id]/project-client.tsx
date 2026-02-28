@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
-import { ArrowLeft, Play, Pause, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Box, Camera, RotateCcw, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Play, Pause, Settings, Download, History, MessageSquare, Code, BarChart3, Box, Camera, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { ChatPanel, type ChatPanelHandle } from "@/components/chat-panel";
 import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
 import { Viewport3D, type Viewport3DHandle } from "@/components/viewport-3d";
@@ -164,7 +164,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const versionsArgs = projectQueryArgs === "skip" ? "skip" : { projectId: projectQueryArgs.id, ownerId: projectQueryArgs.ownerId };
   const project = useQuery(api.projects.get, projectQueryArgs);
   const versions = useQuery(api.versions.list, versionsArgs);
-  const createVersion = useMutation(api.versions.create);
   const saveDraft = useMutation(api.versions.saveDraft);
 
   const [currentVersionId, setCurrentVersionId] = useState<string | null>(null);
@@ -422,25 +421,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     scheduleExecution(isProgressAnimating ? 0 : 500);
   }, [code, parameters, isProgressAnimating, scheduleExecution]);
 
-  const handleSaveVersion = useCallback(async () => {
-    if (isPlaygroundProject) return;
-    if (!code || !projectId || !userId) return;
-    
-    try {
-      const versionId = await createVersion({
-        projectId,
-        jscadCode: code,
-        source: "manual",
-        isValid: true,
-        ownerId: userId,
-      });
-      setCurrentVersionId(versionId);
-      lastPersistedCodeRef.current = code;
-    } catch (err) {
-      console.error("Failed to save version:", err);
-    }
-  }, [code, createVersion, isPlaygroundProject, projectId, userId]);
-
   const getActiveVersionId = useCallback(() => {
     if (currentVersionId) return currentVersionId as Id<"versions">;
     if (project?.currentVersionId) return project.currentVersionId as Id<"versions">;
@@ -481,6 +461,15 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       void autosaveDraft();
     }, delayMs);
   }, [autosaveDraft]);
+
+  useEffect(() => {
+    if (isPlaygroundProject) return;
+    if (!hasLoadedInitialCodeRef.current || !code || !userId) return;
+    if (!getActiveVersionId()) return;
+    if (code === lastPersistedCodeRef.current) return;
+
+    scheduleAutosaveDraft(1000);
+  }, [code, getActiveVersionId, isPlaygroundProject, scheduleAutosaveDraft, userId]);
 
   const handleLoadVersion = useCallback((versionCode: string, versionId: string) => {
     setCode(versionCode);
@@ -549,8 +538,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
   const handleRun = useCallback(async () => {
     await executeCode();
-    scheduleAutosaveDraft(5000);
-  }, [executeCode, scheduleAutosaveDraft]);
+  }, [executeCode]);
 
   const handlePromptComplete = useCallback(() => {
     void autosaveDraft();
@@ -1013,13 +1001,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     () => [
       // --- File operations ---
       {
-        key: "s",
-        ctrl: true,
-        handler: handleSaveVersion,
-        description: "Save version",
-        group: "File",
-      },
-      {
         key: "e",
         ctrl: true,
         handler: () => setShowExport(true),
@@ -1209,7 +1190,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       },
     ],
     [
-      handleSaveVersion,
       handleRun,
       isPlaygroundProject,
       undoCode,
@@ -1467,16 +1447,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               <Play className="w-4 h-4" />
               {isGenerating ? "Running..." : "Run"}
             </button>
-          {!isPlaygroundProject && (
-            <button
-              onClick={handleSaveVersion}
-              className="flex items-center gap-2 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80"
-              title="Save Version (Ctrl+S)"
-            >
-              <Save className="w-4 h-4" />
-              Save
-            </button>
-          )}
           <button
             onClick={() => setShowExport(true)}
             className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-lg text-sm hover:bg-secondary"
