@@ -7,6 +7,16 @@ import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { Plus, Settings, Trash2, Clock, Box, LayoutTemplate, ChevronRight, Search, X } from "lucide-react";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useKeyboardShortcuts, type KeyboardShortcut } from "@/lib/use-keyboard-shortcuts";
 import { useRouter } from "next/navigation";
 import { useAuth, UserButton, SignInButton, SignedIn, SignedOut } from "@/lib/auth-client";
@@ -37,6 +47,8 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [hasAttemptedTemplateSeed, setHasAttemptedTemplateSeed] = useState(false);
   const [templateSeedError, setTemplateSeedError] = useState<string | null>(null);
+  const [projectPendingDelete, setProjectPendingDelete] = useState<Id<"projects"> | null>(null);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
 
   useEffect(() => {
     if (!isConvexConfigured) return;
@@ -93,14 +105,23 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeleteProject = async (
+  const handleDeleteProject = (
     id: Id<"projects">,
     e: React.MouseEvent
   ) => {
     e.stopPropagation();
-    if (!userId) return;
-    if (confirm("Delete this project?")) {
-      await deleteProject({ id, ownerId: userId });
+    setProjectPendingDelete(id);
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!userId || !projectPendingDelete) return;
+
+    setIsDeletingProject(true);
+    try {
+      await deleteProject({ id: projectPendingDelete, ownerId: userId });
+      setProjectPendingDelete(null);
+    } finally {
+      setIsDeletingProject(false);
     }
   };
 
@@ -417,6 +438,32 @@ export default function DashboardPage() {
         onClose={() => setShowShortcuts(false)}
         shortcuts={shortcuts}
       />
+      <AlertDialog
+        open={projectPendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingProject) {
+            setProjectPendingDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The project and its contents will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingProject}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteProject}
+              disabled={isDeletingProject}
+            >
+              {isDeletingProject ? "Deleting..." : "Delete project"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

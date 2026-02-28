@@ -10,6 +10,7 @@
     "lint": "tsslint --project tsconfig.json"
   },
   "dependencies": {
+    "@radix-ui/react-alert-dialog": "^1.1.15",
     "@clerk/nextjs": "^6.38.1",
     "@jscad/io-utils": "^2.0.32",
     "@jscad/modeling": "^2.12.7",
