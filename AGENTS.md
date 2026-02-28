@@ -29,6 +29,8 @@
   - Pushes must never be forced or involve git config changes. If a push is rejected because the remote changed, stop and notify a human.
   - Do not commit secrets or credentials. If changes include potential secrets, abort the push and notify the user.
   - If a pre-commit hook fails, do not amend the commit; instead surface the failure and let a human resolve it.
+* The shorthand `cp` means `commit and push`.
+  - When the user says `cp`, the agent should create a commit containing only the agent's changes and then push that commit to the repository remote.
 
 ## Playwright MCP Testing
 * If you want to test with the Playwright MCP, first commit your changes and merge them into `main`.
