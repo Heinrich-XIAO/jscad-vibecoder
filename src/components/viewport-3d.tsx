@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from "react";
+import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useTheme } from "@/lib/theme-provider";
 import {
   BufferGeometry,
@@ -20,12 +20,10 @@ import {
   Vector3,
   ConeGeometry,
   Line,
-  EdgesGeometry,
   DoubleSide,
   Object3D,
   AmbientLight,
   DirectionalLight,
-  Light,
 } from "three";
 import { polygonVertices } from "@/lib/jscad-geometry";
 
@@ -41,6 +39,27 @@ interface Viewport3DProps {
   geometry: unknown[];
   isGenerating?: boolean;
   className?: string;
+}
+
+type Vertex3 = [number, number, number];
+
+const EDGE_NORMAL_DOT_THRESHOLD = 0.999;
+
+function disposeObject3D(object: Object3D) {
+  object.traverse((child) => {
+    const mesh = child as Mesh;
+    if (mesh.geometry) {
+      mesh.geometry.dispose();
+    }
+
+    const material = mesh.material;
+    if (!material) return;
+    if (Array.isArray(material)) {
+      material.forEach((m) => m.dispose());
+      return;
+    }
+    material.dispose();
+  });
 }
 
 // Convert JSCAD geometry to Three.js BufferGeometry
@@ -83,6 +102,104 @@ function jscadToThreeGeometry(geom: unknown): BufferGeometry | null {
   return geometry;
 }
 
+function jscadToThreeEdgeGeometry(geom: unknown): BufferGeometry | null {
+  const g = geom as Record<string, unknown>;
+
+  if (!g.polygons || !Array.isArray(g.polygons)) {
+    return null;
+  }
+
+  const polygons = g.polygons as Array<Record<string, unknown>>;
+  const edgeMap = new Map<string, { start: Vertex3; end: Vertex3; normals: Vertex3[] }>();
+
+  const formatVertexKey = (vertex: Vertex3) =>
+    `${vertex[0].toFixed(5)},${vertex[1].toFixed(5)},${vertex[2].toFixed(5)}`;
+
+  const buildEdgeKey = (start: Vertex3, end: Vertex3) => {
+    const startKey = formatVertexKey(start);
+    const endKey = formatVertexKey(end);
+    return startKey < endKey ? `${startKey}|${endKey}` : `${endKey}|${startKey}`;
+  };
+
+  const computePolygonNormal = (vertices: Vertex3[]): Vertex3 | null => {
+    for (let i = 1; i < vertices.length - 1; i++) {
+      const ax = vertices[i][0] - vertices[0][0];
+      const ay = vertices[i][1] - vertices[0][1];
+      const az = vertices[i][2] - vertices[0][2];
+      const bx = vertices[i + 1][0] - vertices[0][0];
+      const by = vertices[i + 1][1] - vertices[0][1];
+      const bz = vertices[i + 1][2] - vertices[0][2];
+
+      const nx = ay * bz - az * by;
+      const ny = az * bx - ax * bz;
+      const nz = ax * by - ay * bx;
+      const length = Math.hypot(nx, ny, nz);
+      if (length > 1e-8) {
+        return [nx / length, ny / length, nz / length];
+      }
+    }
+
+    return null;
+  };
+
+  for (const polygon of polygons) {
+    const polyVertices = polygonVertices(polygon) as Vertex3[];
+    if (polyVertices.length < 2) continue;
+    const normal = computePolygonNormal(polyVertices);
+    if (!normal) continue;
+
+    for (let i = 0; i < polyVertices.length; i++) {
+      const current = polyVertices[i];
+      const next = polyVertices[(i + 1) % polyVertices.length];
+      const edgeKey = buildEdgeKey(current, next);
+      const existing = edgeMap.get(edgeKey);
+      if (existing) {
+        existing.normals.push(normal);
+        continue;
+      }
+      edgeMap.set(edgeKey, {
+        start: [...current] as Vertex3,
+        end: [...next] as Vertex3,
+        normals: [normal],
+      });
+    }
+  }
+
+  const lineVertices: number[] = [];
+
+  edgeMap.forEach(({ start, end, normals }) => {
+    if (normals.length > 1) {
+      let keepEdge = false;
+      for (let i = 0; i < normals.length && !keepEdge; i++) {
+        for (let j = i + 1; j < normals.length; j++) {
+          const dot =
+            normals[i][0] * normals[j][0] +
+            normals[i][1] * normals[j][1] +
+            normals[i][2] * normals[j][2];
+          if (Math.abs(dot) < EDGE_NORMAL_DOT_THRESHOLD) {
+            keepEdge = true;
+            break;
+          }
+        }
+      }
+      if (!keepEdge) return;
+    }
+
+    lineVertices.push(
+      start[0], start[1], start[2],
+      end[0], end[1], end[2]
+    );
+  });
+
+  if (lineVertices.length === 0) {
+    return null;
+  }
+
+  const edgeGeometry = new BufferGeometry();
+  edgeGeometry.setAttribute("position", new Float32BufferAttribute(lineVertices, 3));
+  return edgeGeometry;
+}
+
 export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geometry, isGenerating, className = "" }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<Scene | null>(null);
@@ -91,20 +208,66 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
   const meshGroupRef = useRef<Group | null>(null);
   const gridMaterialRef = useRef<LineBasicMaterial | null>(null);
   const axesHelperRef = useRef<AxesHelper | null>(null);
-  const [rotation, setRotation] = useState({ x: -30, y: 45 });
-  const [isDragging, setIsDragging] = useState(false);
+  const rotationRef = useRef({ x: -30, y: 45 });
+  const zoomRef = useRef(50);
+  const isDraggingRef = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(50);
+  const renderFrameRef = useRef<number | null>(null);
+
+  const renderScene = useCallback(() => {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    if (!renderer || !scene || !camera) return;
+    renderer.render(scene, camera);
+  }, []);
+
+  const requestRender = useCallback(() => {
+    if (renderFrameRef.current !== null) return;
+    renderFrameRef.current = requestAnimationFrame(() => {
+      renderFrameRef.current = null;
+      renderScene();
+    });
+  }, [renderScene]);
+
+  const syncCamera = useCallback(() => {
+    const camera = cameraRef.current;
+    if (!camera) return;
+
+    const rotation = rotationRef.current;
+    const zoom = zoomRef.current;
+    const radX = (rotation.y * Math.PI) / 180;
+    const radY = (rotation.x * Math.PI) / 180;
+
+    const x = zoom * Math.sin(radX) * Math.cos(radY);
+    const y = zoom * Math.sin(radY);
+    const z = zoom * Math.cos(radX) * Math.cos(radY);
+
+    camera.position.set(x, y, z);
+    camera.lookAt(0, 0, 0);
+    requestRender();
+  }, [requestRender]);
 
   useImperativeHandle(ref, () => ({
     rotate: (dx, dy) => {
-      setRotation((r) => ({ x: r.x + dx, y: r.y + dy }));
+      rotationRef.current = {
+        x: Math.max(-90, Math.min(90, rotationRef.current.x + dx)),
+        y: rotationRef.current.y + dy,
+      };
+      syncCamera();
     },
-    zoomIn: () => setZoom((z) => Math.min(300, z * 1.2)),
-    zoomOut: () => setZoom((z) => Math.max(5, z / 1.2)),
+    zoomIn: () => {
+      zoomRef.current = Math.min(300, zoomRef.current * 1.2);
+      syncCamera();
+    },
+    zoomOut: () => {
+      zoomRef.current = Math.max(5, zoomRef.current / 1.2);
+      syncCamera();
+    },
     reset: () => {
-      setRotation({ x: -30, y: 45 });
-      setZoom(50);
+      rotationRef.current = { x: -30, y: 45 };
+      zoomRef.current = 50;
+      syncCamera();
     },
     captureImage: () => {
       const renderer = rendererRef.current;
@@ -113,7 +276,7 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
       if (!renderer || !scene || !camera) {
         return null;
       }
-      renderer.render(scene, camera);
+      renderScene();
       try {
         return renderer.domElement.toDataURL("image/png");
       } catch (error) {
@@ -121,7 +284,7 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
         return null;
       }
     },
-  }));
+  }), [renderScene, syncCamera]);
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -137,12 +300,16 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     sceneRef.current = scene;
 
     const camera = new PerspectiveCamera(50, width / height, 0.1, 1000);
-    camera.position.set(0, 0, zoom);
+    camera.position.set(0, 0, zoomRef.current);
     cameraRef.current = camera;
 
-    const renderer = new WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    const renderer = new WebGLRenderer({
+      antialias: true,
+      preserveDrawingBuffer: true,
+      powerPreference: "high-performance",
+    });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -199,12 +366,12 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
     scene.add(meshGroup);
     meshGroupRef.current = meshGroup;
 
-    // Animation loop
-    const animate = () => {
-      requestAnimationFrame(animate);
-      renderer.render(scene, camera);
-    };
-    animate();
+    const ambientLight = new AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+
+    const directionalLight = new DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 10, 10);
+    scene.add(directionalLight);
 
     // Handle resize
     const handleResize = () => {
@@ -214,17 +381,24 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
       camera.aspect = newWidth / newHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(newWidth, newHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      requestRender();
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
     resizeObserver.observe(container);
+    syncCamera();
 
     return () => {
       resizeObserver.disconnect();
+      if (renderFrameRef.current !== null) {
+        cancelAnimationFrame(renderFrameRef.current);
+        renderFrameRef.current = null;
+      }
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
-  }, []);
+  }, [requestRender, syncCamera]);
 
   const { resolvedTheme } = useTheme();
 
@@ -344,48 +518,32 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
         }
       });
     }
-  }, [resolvedTheme]);
+    requestRender();
+  }, [requestRender, resolvedTheme]);
 
-  // Update camera position based on rotation and zoom
-  useEffect(() => {
-    if (!cameraRef.current) return;
-    
-    const radX = (rotation.y * Math.PI) / 180;
-    const radY = (rotation.x * Math.PI) / 180;
-    
-    const x = zoom * Math.sin(radX) * Math.cos(radY);
-    const y = zoom * Math.sin(radY);
-    const z = zoom * Math.cos(radX) * Math.cos(radY);
-    
-    cameraRef.current.position.set(x, y, z);
-    cameraRef.current.lookAt(0, 0, 0);
-  }, [rotation, zoom]);
-
-  // Update geometry
+  // Keep the previous frame visible while a new evaluation is in flight.
   useEffect(() => {
     if (!meshGroupRef.current || !geometry) return;
 
     const group = meshGroupRef.current;
-    
-    // Clear existing meshes
+
+    if (isGenerating) return;
+
     while (group.children.length > 0) {
       const child = group.children[0];
-      if (child instanceof Mesh) {
-        child.geometry.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m: Material) => m.dispose());
-        } else {
-          child.material.dispose();
-        }
-      }
+      disposeObject3D(child);
       group.remove(child);
     }
 
-    if (isGenerating || !geometry.length) return;
+    if (!geometry.length) {
+      requestRender();
+      return;
+    }
 
     for (const geom of geometry) {
       const threeGeom = jscadToThreeGeometry(geom);
       if (!threeGeom) continue;
+      const edgeGeom = jscadToThreeEdgeGeometry(geom);
 
       const solidMaterial = new MeshPhongMaterial({
         color: 0xc0c0c0,
@@ -394,59 +552,50 @@ export const Viewport3D = forwardRef<Viewport3DHandle, Viewport3DProps>(({ geome
         side: DoubleSide,
       });
       const mesh = new Mesh(threeGeom, solidMaterial);
-      
-      const edges = new EdgesGeometry(threeGeom, 15);
-      const lineMaterial = new LineBasicMaterial({ 
-        color: 0x000000,
-        depthTest: true,
-        depthWrite: true,
-      });
-      const lines = new LineSegments(edges, lineMaterial);
-      
-      const obj = new Group();
-      obj.add(mesh);
-      obj.add(lines);
-      
-      group.add(obj);
-    }
+      group.add(mesh);
 
-    // Add lighting
-    if (sceneRef.current) {
-      const oldLights = sceneRef.current.children.filter(c => c instanceof Light);
-      oldLights.forEach(l => sceneRef.current!.remove(l));
-      
-      const ambientLight = new AmbientLight(0xffffff, 0.6);
-      sceneRef.current.add(ambientLight);
-      
-      const directionalLight = new DirectionalLight(0xffffff, 0.8);
-      directionalLight.position.set(10, 10, 10);
-      sceneRef.current.add(directionalLight);
+      if (edgeGeom) {
+        const edgeMaterial = new LineBasicMaterial({
+          color: 0x000000,
+          depthTest: true,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.9,
+        });
+        const edges = new LineSegments(edgeGeom, edgeMaterial);
+        group.add(edges);
+      }
     }
-  }, [geometry, isGenerating]);
+    requestRender();
+  }, [geometry, isGenerating, requestRender]);
 
   // Mouse interaction
   const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
+    isDraggingRef.current = true;
     lastPos.current = { x: e.clientX, y: e.clientY };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
+    if (!isDraggingRef.current) return;
     const dx = e.clientX - lastPos.current.x;
     const dy = e.clientY - lastPos.current.y;
-    setRotation((r) => ({
-      x: Math.max(-90, Math.min(90, r.x + dy * 0.5)),
-      y: r.y - dx * 0.5,
-    }));
+    rotationRef.current = {
+      x: Math.max(-90, Math.min(90, rotationRef.current.x + dy * 0.5)),
+      y: rotationRef.current.y - dx * 0.5,
+    };
     lastPos.current = { x: e.clientX, y: e.clientY };
+    syncCamera();
   };
 
-  const handleMouseUp = () => setIsDragging(false);
+  const handleMouseUp = () => {
+    isDraggingRef.current = false;
+  };
 
   const handleWheel = useCallback((event: WheelEvent) => {
     event.preventDefault();
-    setZoom((z) => Math.max(5, Math.min(300, z + event.deltaY * 0.01)));
-  }, []);
+    zoomRef.current = Math.max(5, Math.min(300, zoomRef.current + event.deltaY * 0.01));
+    syncCamera();
+  }, [syncCamera]);
 
   useEffect(() => {
     const container = containerRef.current;
