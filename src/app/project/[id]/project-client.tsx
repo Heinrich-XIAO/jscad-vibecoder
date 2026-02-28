@@ -125,15 +125,15 @@ function insertAroundTarget(
 
 export default function ProjectPage({ id }: ProjectPageProps) {
   const router = useRouter();
-  const { userId } = useAuth();
+  const { userId, isLoaded: isAuthLoaded, isSignedIn } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const focusChatParam = searchParams.get("focusChat") === "1";
 
   const projectQueryArgs = useMemo(() => {
-    if (!id || !userId) return "skip";
+    if (!id || !isAuthLoaded || !userId) return "skip";
     return { id: id as Id<"projects">, ownerId: userId };
-  }, [id, userId]);
+  }, [id, isAuthLoaded, userId]);
 
   const projectId = projectQueryArgs === "skip" ? null : projectQueryArgs.id;
   const versionsArgs = projectQueryArgs === "skip" ? "skip" : { projectId: projectQueryArgs.id, ownerId: projectQueryArgs.ownerId };
@@ -207,7 +207,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
   const { execute } = useJscadWorker();
   const geometryCount = geometry.length;
-  const isSignedIn = !!userId;
 
   const isChatVisible = showChat;
 
@@ -233,11 +232,11 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
   useEffect(() => {
     if (hasLoadedInitialCodeRef.current) return;
-    if (isSignedIn || code) return;
+    if (!isAuthLoaded || isSignedIn || code) return;
     resetCode(GUEST_STARTER_CODE);
     lastPersistedCodeRef.current = GUEST_STARTER_CODE;
     hasLoadedInitialCodeRef.current = true;
-  }, [code, isSignedIn, resetCode]);
+  }, [code, isAuthLoaded, isSignedIn, resetCode]);
 
   useEffect(() => {
     if (!focusChatParam || !projectId || hasAutoFocusedChatRef.current) return;
@@ -1026,6 +1025,14 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   );
 
   useKeyboardShortcuts(shortcuts);
+
+  if (!isAuthLoaded) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-muted-foreground">Loading project...</div>
+      </div>
+    );
+  }
 
   if (isSignedIn && project === undefined) {
     return (
