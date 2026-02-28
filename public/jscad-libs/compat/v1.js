@@ -736,20 +736,34 @@ const solveGearTrainBetweenFixedEndpoints = ({
   }
 
   assembly.push(outputNode);
-  for (let index = 1; index < assembly.length - 1; index += 1) {
-    const previousNode = assembly[index - 1];
-    const currentNode = assembly[index];
-    currentNode.pose.rotZ = computeMeshedFollowerAngle({
-      driverAngleDeg: previousNode.pose.rotZ,
-      driverPart: previousNode.part,
-      driverModel: previousNode.model,
-      driverCenterX: previousNode.pose.x,
-      driverCenterY: previousNode.pose.y,
-      followerPart: currentNode.part,
-      followerModel: currentNode.model,
-      followerCenterX: currentNode.pose.x,
-      followerCenterY: currentNode.pose.y,
+  if (assembly.length === 3) {
+    assembly[1].pose.rotZ = computeMeshedFollowerAngle({
+      driverAngleDeg: assembly[2].pose.rotZ,
+      driverPart: assembly[2].part,
+      driverModel: assembly[2].model,
+      driverCenterX: assembly[2].pose.x,
+      driverCenterY: assembly[2].pose.y,
+      followerPart: assembly[1].part,
+      followerModel: assembly[1].model,
+      followerCenterX: assembly[1].pose.x,
+      followerCenterY: assembly[1].pose.y,
     });
+  } else {
+    for (let index = 1; index < assembly.length - 1; index += 1) {
+      const previousNode = assembly[index - 1];
+      const currentNode = assembly[index];
+      currentNode.pose.rotZ = computeMeshedFollowerAngle({
+        driverAngleDeg: previousNode.pose.rotZ,
+        driverPart: previousNode.part,
+        driverModel: previousNode.model,
+        driverCenterX: previousNode.pose.x,
+        driverCenterY: previousNode.pose.y,
+        followerPart: currentNode.part,
+        followerModel: currentNode.model,
+        followerCenterX: currentNode.pose.x,
+        followerCenterY: currentNode.pose.y,
+      });
+    }
   }
 
   return {
