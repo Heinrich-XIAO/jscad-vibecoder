@@ -42,30 +42,6 @@ export const seed = mutation({
   handler: async (ctx) => {
     const templates = [
       {
-        name: "Basic Box",
-        description: "A simple parametric box with configurable dimensions",
-        category: "Primitives",
-        jscadCode: `const { cuboid } = require('@jscad/modeling').primitives
-
-const getParameterDefinitions = () => [
-  { name: 'width', type: 'float', initial: 30, caption: 'Width (mm)' },
-  { name: 'depth', type: 'float', initial: 20, caption: 'Depth (mm)' },
-  { name: 'height', type: 'float', initial: 15, caption: 'Height (mm)' },
-]
-
-const main = (params) => {
-  const { width = 30, depth = 20, height = 15 } = params || {}
-  return [cuboid({ size: [width, depth, height] })]
-}
-
-module.exports = { main, getParameterDefinitions }`,
-        parameterSchema: {
-          width: { type: "number", min: 1, max: 200, default: 30, label: "Width (mm)" },
-          depth: { type: "number", min: 1, max: 200, default: 20, label: "Depth (mm)" },
-          height: { type: "number", min: 1, max: 200, default: 15, label: "Height (mm)" },
-        },
-      },
-      {
         name: "Mounting Bracket",
         description: "L-shaped bracket with mounting holes",
         category: "Mechanical",
@@ -127,7 +103,7 @@ module.exports = { main }`,
     const existingByName = new Map(existingTemplates.map((template) => [template.name, template]));
 
     for (const existingTemplate of existingTemplates) {
-      if (existingTemplate.name === "Rounded Box") {
+      if (existingTemplate.name === "Rounded Box" || existingTemplate.name === "Basic Box") {
         await ctx.db.delete(existingTemplate._id);
       }
     }
