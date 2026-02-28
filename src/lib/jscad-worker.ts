@@ -68,9 +68,12 @@ export class JscadWorker {
   private worker: Worker | null = null;
   private pendingResolve: ((value: WorkerResponse) => void) | null = null;
   private pendingReject: ((reason: JscadWorkerError) => void) | null = null;
+  private evaluationTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private activeEvaluationId = 0;
   private isReady = false;
   private readyPromise: Promise<void> | null = null;
   private readyResolve: (() => void) | null = null;
+  private readyTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private staticWorkerUrl = '/jscad-worker.js';
 
   constructor() {
@@ -82,6 +85,16 @@ export class JscadWorker {
     this.isReady = false;
     this.readyPromise = null;
     this.readyResolve = null;
+    if (this.readyTimeoutId) {
+      clearTimeout(this.readyTimeoutId);
+      this.readyTimeoutId = null;
+    }
+    if (this.evaluationTimeoutId) {
+      clearTimeout(this.evaluationTimeoutId);
+      this.evaluationTimeoutId = null;
+    }
+    this.pendingResolve = null;
+    this.pendingReject = null;
 
     try {
       this.worker = new Worker(this.staticWorkerUrl, { type: 'classic' });
@@ -108,6 +121,10 @@ export class JscadWorker {
       const data = e.data as any;
       if (data.type === 'ready') {
         this.isReady = true;
+        if (this.readyTimeoutId) {
+          clearTimeout(this.readyTimeoutId);
+          this.readyTimeoutId = null;
+        }
         if (this.readyResolve) {
           this.readyResolve();
           this.readyResolve = null;
@@ -116,6 +133,10 @@ export class JscadWorker {
       }
       
       if (e.data.type === "parameters") return;
+      if (this.evaluationTimeoutId) {
+        clearTimeout(this.evaluationTimeoutId);
+        this.evaluationTimeoutId = null;
+      }
       if (e.data.type === "error") {
         this.pendingReject?.(new JscadWorkerError(e.data.error ?? { message: "Unknown error" }));
       } else {
@@ -131,11 +152,12 @@ export class JscadWorker {
     if (!this.readyPromise) {
       this.readyPromise = new Promise((resolve) => {
         this.readyResolve = resolve;
-        setTimeout(() => {
+        this.readyTimeoutId = setTimeout(() => {
           if (this.readyResolve) {
             this.readyResolve();
             this.readyResolve = null;
           }
+          this.readyTimeoutId = null;
         }, 15000);
       });
     }
@@ -167,6 +189,7 @@ export class JscadWorker {
 
       this.pendingResolve = resolve;
       this.pendingReject = reject;
+      const evaluationId = ++this.activeEvaluationId;
 
       const request: WorkerRequest = {
         type: "evaluate",
@@ -176,11 +199,15 @@ export class JscadWorker {
 
       this.worker.postMessage(request);
 
-      setTimeout(() => {
-        if (this.pendingReject) {
+      if (this.evaluationTimeoutId) {
+        clearTimeout(this.evaluationTimeoutId);
+      }
+      this.evaluationTimeoutId = setTimeout(() => {
+        if (this.pendingReject && this.activeEvaluationId === evaluationId) {
           this.pendingReject(new JscadWorkerError({ message: "JSCAD evaluation timed out (30s)" }));
           this.pendingResolve = null;
           this.pendingReject = null;
+          this.evaluationTimeoutId = null;
           this.terminate();
           this.initWorker();
         }
@@ -189,6 +216,14 @@ export class JscadWorker {
   }
 
   terminate() {
+    if (this.readyTimeoutId) {
+      clearTimeout(this.readyTimeoutId);
+      this.readyTimeoutId = null;
+    }
+    if (this.evaluationTimeoutId) {
+      clearTimeout(this.evaluationTimeoutId);
+      this.evaluationTimeoutId = null;
+    }
     this.worker?.terminate();
     this.worker = null;
     this.isReady = false;
