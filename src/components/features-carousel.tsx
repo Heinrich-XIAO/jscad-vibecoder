@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useMemo } from "react";
 import { Box, Zap, Bot, Download, Settings, Github } from "lucide-react";
 
 const features = [
@@ -37,35 +37,7 @@ const features = [
 ];
 
 export default function FeaturesCarousel() {
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-
-    const items = track.querySelectorAll(".carousel-item");
-    if (items.length === 0) return;
-
-    let pos = 0;
-    const itemWidth = (items[0] as HTMLElement).offsetWidth;
-    const gap = 16;
-    const totalItemWidth = itemWidth + gap;
-    const totalWidth = totalItemWidth * features.length;
-
-    const animate = () => {
-      pos -= 1;
-      
-      if (pos <= -totalWidth) {
-        pos += totalWidth;
-      }
-      
-      track.style.transform = `translateX(${pos}px)`;
-      requestAnimationFrame(animate);
-    };
-
-    const animationId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animationId);
-  }, []);
+  const repeatedFeatures = useMemo(() => [...features, ...features], []);
 
   return (
     <section className="px-6 py-20 overflow-hidden">
@@ -74,11 +46,10 @@ export default function FeaturesCarousel() {
         
         <div className="relative overflow-visible">
           <div 
-            ref={trackRef} 
-            className="flex gap-4"
+            className="flex w-max gap-4 motion-safe:animate-marquee motion-reduce:transform-none"
             style={{ width: "max-content" }}
           >
-            {[...features, ...features, ...features, ...features, ...features, ...features].map((feature, index) => (
+            {repeatedFeatures.map((feature, index) => (
               <div
                 key={index}
                 className="carousel-item flex-shrink-0 w-[280px] sm:w-[320px]"

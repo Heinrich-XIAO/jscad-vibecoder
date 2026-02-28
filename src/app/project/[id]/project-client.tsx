@@ -82,6 +82,11 @@ module.exports = { main, getParameterDefinitions }
 
 const PROGRESS_PARAM_NAME = "progress";
 const PROGRESS_ANIMATION_DURATION_MS = 2000;
+const PROGRESS_ANIMATION_FPS = 30;
+const PROGRESS_ANIMATION_STEPS = Math.max(
+  1,
+  Math.round((PROGRESS_ANIMATION_DURATION_MS / 1000) * PROGRESS_ANIMATION_FPS)
+);
 
 const LEGACY_LINKAGE_TEMPLATE_SNIPPET =
   "{ initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 18) }";
@@ -232,7 +237,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   } | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const hasAutoCompactedInitialLayoutRef = useRef(false);
-  const progressAnimationStartRef = useRef<number | null>(null);
   const latestCodeRef = useRef(code);
   const latestParametersRef = useRef(parameters);
   const isExecutingRef = useRef(false);
@@ -380,21 +384,18 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     } finally {
       isExecutingRef.current = false;
       setIsGenerating(false);
-      if (isProgressAnimatingRef.current && progressAnimationStartRef.current !== null) {
-        const elapsed = performance.now() - progressAnimationStartRef.current;
-        const nextProgress = Math.min(elapsed / PROGRESS_ANIMATION_DURATION_MS, 1);
+      if (isProgressAnimatingRef.current) {
         const currentProgress = Number(latestParametersRef.current[PROGRESS_PARAM_NAME] ?? 0);
+        const progressStep = 1 / PROGRESS_ANIMATION_STEPS;
+        const nextProgress = Math.min(currentProgress + progressStep, 1);
 
         if (nextProgress >= 1) {
-          progressAnimationStartRef.current = null;
+          setParameters((prev) => ({
+            ...prev,
+            [PROGRESS_PARAM_NAME]: 1,
+          }));
           setIsProgressAnimating(false);
-          if (currentProgress !== 1) {
-            setParameters((prev) => ({
-              ...prev,
-              [PROGRESS_PARAM_NAME]: 1,
-            }));
-          }
-        } else if (nextProgress > currentProgress + 0.0001) {
+        } else {
           setParameters((prev) => ({
             ...prev,
             [PROGRESS_PARAM_NAME]: nextProgress,
@@ -500,14 +501,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
   const handleParameterChange = (name: string, value: number | boolean | string) => {
     if (name === PROGRESS_PARAM_NAME && isProgressAnimating) {
-      progressAnimationStartRef.current = null;
       setIsProgressAnimating(false);
     }
     setParameters((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleResetParameters = useCallback(() => {
-    progressAnimationStartRef.current = null;
     setIsProgressAnimating(false);
     const defaults: ParameterValues = {};
     parameterDefs.forEach((def) => {
@@ -520,7 +519,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     const def = parameterDefs.find((d) => d.name === name);
     if (def) {
       if (name === PROGRESS_PARAM_NAME) {
-        progressAnimationStartRef.current = null;
         setIsProgressAnimating(false);
       }
       setParameters((prev) => ({
@@ -551,7 +549,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [autosaveDraft]);
 
   const stopProgressAnimation = useCallback(() => {
-    progressAnimationStartRef.current = null;
     setIsProgressAnimating(false);
   }, []);
 
@@ -569,7 +566,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       [PROGRESS_PARAM_NAME]: progressDef.min ?? 0,
     }));
     setIsProgressAnimating(true);
-    progressAnimationStartRef.current = performance.now();
   }, [isProgressAnimating, parameterDefs, stopProgressAnimation]);
 
   useEffect(() => {
