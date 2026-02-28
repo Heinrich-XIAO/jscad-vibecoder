@@ -31,6 +31,7 @@
   - If a pre-commit hook fails, do not amend the commit; instead surface the failure and let a human resolve it.
 * The shorthand `cp` means `commit and push`.
   - When the user says `cp`, the agent should create a commit containing only the agent's changes and then push that commit to the repository remote.
+  - When the user says `cp` with no surrounding context or says "cp all," treat it as a signal to inspect `git status` and `git diff`, then plan and describe how the pending changes will be broken down into logical commits before proceeding.
 
 ## Playwright MCP Testing
 * If you want to test with the Playwright MCP, first commit your changes and merge them into `main`.
