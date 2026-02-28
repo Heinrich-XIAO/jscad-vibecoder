@@ -42,6 +42,28 @@ export const seed = mutation({
   handler: async (ctx) => {
     const templates = [
       {
+        name: "Linkage Demo",
+        description:
+          "Uses built-in coord() and linkage() helpers to drive a rack-and-pinion pair from endpoint motions.",
+        category: "Mechanisms",
+        jscadCode: `function getParameterDefinitions() {
+  return [
+    { name: 'progress', type: 'float', initial: 0, min: 0, max: 1, step: 0.01, caption: 'Progress' },
+  ]
+}
+
+function main(params) {
+  const { progress = 0 } = params || {}
+  return linkage(
+    { initial: coord(0, 0, 0), final: coord(Math.PI, 0, 0) },
+    { initial: coord(3 * Math.PI, 0, 0, 0, 0, 0), final: coord(3 * Math.PI, 0, 0, 0, 0, 18) },
+    { progress }
+  )
+}
+
+module.exports = { main, getParameterDefinitions }`,
+      },
+      {
         name: "Mounting Bracket",
         description: "L-shaped bracket with mounting holes",
         category: "Mechanical",
@@ -82,20 +104,6 @@ module.exports = { main, getParameterDefinitions }`,
           legHeight: { type: "number", min: 5, max: 100, default: 25, label: "Leg Height (mm)" },
           holeRadius: { type: "number", min: 0.5, max: 10, default: 2.1, label: "Hole Radius (mm)" },
         },
-      },
-      {
-        name: "Linkage Demo",
-        description:
-          "Uses built-in coord() and linkage() helpers to drive a rack-and-pinion pair from endpoint motions.",
-        category: "Mechanisms",
-        jscadCode: `function main() {
-  return linkage(
-    { initial: coord(0, 0, 0), final: coord(Math.PI, 0, 0) },
-    { initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 18) }
-  )
-}
-
-module.exports = { main }`,
       },
     ];
 

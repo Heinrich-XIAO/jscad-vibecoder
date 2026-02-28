@@ -244,3 +244,16 @@ test("linkage adds a two-gear stage and resizes the main gear when the ratio mis
   expect(rotationZFromTransform(mismatched[3].transforms)).toBeGreaterThan(0);
   expect(widthX(mismatched[3])).not.toBeCloseTo(widthX(matched[1]), 10);
 });
+
+test("linkage adds a reversing stage when requested output direction disagrees with rack travel", () => {
+  const v1 = loadCompatAndMechanics();
+
+  const assembly = v1.linkage(
+    { initial: v1.coord(10 * Math.PI, 0, 0), final: v1.coord(0, 0, 0) },
+    { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 180) }
+  );
+
+  expect(assembly.length).toBe(4);
+  expect(rotationZFromTransform(assembly[1].transforms)).toBeLessThan(0);
+  expect(rotationZFromTransform(assembly[3].transforms)).toBeGreaterThan(0);
+});

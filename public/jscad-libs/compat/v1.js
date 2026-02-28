@@ -541,11 +541,11 @@ const linkage = (motionA, motionB, options = {}) => {
   const totalObservedRotationDeltaOnDominantAxis = toFiniteNumber(rotation.delta, 0);
   const currentRackTravel = alignedRackPose.x - translationSourceInitial.x;
   const totalRackTravel = translation.delta;
-  const linkedRotationSign =
-    Math.sign(totalObservedRotationDeltaOnDominantAxis) || Math.sign(totalRackTravel) || 1;
+  const rackDrivenRotationSign = Math.sign(totalRackTravel) || 1;
+  const requestedRotationSign = Math.sign(totalObservedRotationDeltaOnDominantAxis) || 1;
   const rackDrivenRotationDeg =
     Math.abs(pitchRadius) > EPSILON && rotation.axis === "rotZ"
-      ? (Math.abs(currentRackTravel) / pitchRadius) * (180 / Math.PI) * linkedRotationSign
+      ? (Math.abs(currentRackTravel) / pitchRadius) * (180 / Math.PI) * rackDrivenRotationSign
       : observedRotationDeltaOnDominantAxis;
   if (rotation.axis === "rotZ") {
     const pinionStartAngleDeg = computeRackMeshedRotation({
@@ -558,16 +558,21 @@ const linkage = (motionA, motionB, options = {}) => {
       rackY: alignedRackPose.y,
       rackPhaseOriginX,
       rackReferenceToothCenterAtStart,
-      preferredAngleDeg: linkedRotationSign * EPSILON,
+      preferredAngleDeg: rackDrivenRotationSign * EPSILON,
     });
     rotationDelta.rotZ = pinionStartAngleDeg + rackDrivenRotationDeg;
   }
 
   const desiredPinionRotationTotalDeg =
     Math.abs(pitchRadius) > EPSILON
-      ? (Math.abs(totalRackTravel) / pitchRadius) * (180 / Math.PI) * linkedRotationSign
+      ? (Math.abs(totalRackTravel) / pitchRadius) * (180 / Math.PI) * rackDrivenRotationSign
       : 0;
   const desiredMainRotationTotalDeg = totalObservedRotationDeltaOnDominantAxis;
+  const directionMismatch =
+    rotation.axis === "rotZ" &&
+    Math.abs(desiredMainRotationTotalDeg) > EPSILON &&
+    Math.abs(desiredPinionRotationTotalDeg) > EPSILON &&
+    requestedRotationSign !== rackDrivenRotationSign;
   const ratioMismatch =
     rotation.axis === "rotZ" &&
     Math.abs(desiredMainRotationTotalDeg) > EPSILON &&
@@ -578,7 +583,7 @@ const linkage = (motionA, motionB, options = {}) => {
   const positionedRack = applyPose(rackModel, alignedRackPose);
   const assembly = [unwrapGeometry(positionedRack)];
 
-  if (ratioMismatch) {
+  if (ratioMismatch || directionMismatch) {
     const stageTeethNumber = 8;
     const mainTeethNumber = Math.max(
       6,
@@ -648,12 +653,12 @@ const linkage = (motionA, motionB, options = {}) => {
       rackY: alignedRackPose.y,
       rackPhaseOriginX,
       rackReferenceToothCenterAtStart,
-      preferredAngleDeg: linkedRotationSign * EPSILON,
+      preferredAngleDeg: rackDrivenRotationSign * EPSILON,
     });
     const rackDriverDeltaDeg =
       (Math.abs(currentRackTravel) / Math.max(rackDriverPitchRadius, EPSILON)) *
       (180 / Math.PI) *
-      linkedRotationSign;
+      rackDrivenRotationSign;
     const rackDriverAngleDeg = rackDriverStartAngleDeg + rackDriverDeltaDeg;
     const idlerStartAngleDeg = computeMeshedFollowerAngle({
       driverAngleDeg: rackDriverStartAngleDeg,
