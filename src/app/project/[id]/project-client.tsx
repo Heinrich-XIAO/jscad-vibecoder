@@ -1307,9 +1307,15 @@ export default function ProjectPage({ id }: ProjectPageProps) {
                 <div className="absolute top-2 left-2 z-10 flex items-center gap-2">
                   <button
                     onClick={handleInsertViewportSnapshot}
-                    disabled={isSnapshotting || geometryCount === 0 || isGenerating}
+                    disabled={isSnapshotting || isProgressAnimating || geometryCount === 0 || isGenerating}
                     className="p-2 rounded-md bg-background/90 border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    title={geometryCount === 0 ? "Run code to capture a model snapshot" : "Insert the current view into your next prompt"}
+                    title={
+                      geometryCount === 0
+                        ? "Run code to capture a model snapshot"
+                        : isProgressAnimating
+                          ? "Pause animation to capture a snapshot"
+                          : "Insert the current view into your next prompt"
+                    }
                   >
                     <Camera className="w-4 h-4" />
                   </button>
