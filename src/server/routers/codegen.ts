@@ -1705,8 +1705,8 @@ Use two motions (each has initial/final), where each coordinate can be provided 
 
 Example user intent:
 linkage(
-  { initial: coord(0, 0, 0), final: coord(4, 0, 0) },
-  { initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 50) }
+  { initial: coord(0, 0, 0), final: coord(Math.PI, 0, 0) },
+  { initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 18) }
 )
 
 The linkage tool returns inferred pitch radius, motion ratio, axis mapping, and progress-ready equations.

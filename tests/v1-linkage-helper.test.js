@@ -81,6 +81,20 @@ test("linkage places the rack at its translated final pose", () => {
   expect(assembly[0].transforms[13]).toBe(0);
 });
 
+test("linkage drives pinion rotation from rack travel for the stock demo geometry", () => {
+  const v1 = loadCompatAndMechanics();
+  const fromSmallRotation = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 20) }
+  );
+  const fromLargeRotation = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+  );
+
+  expect(fromSmallRotation[1].transforms).toEqual(fromLargeRotation[1].transforms);
+});
+
 test("linkage rotates pinion phase to match rack position", () => {
   const v1 = loadCompatAndMechanics();
 

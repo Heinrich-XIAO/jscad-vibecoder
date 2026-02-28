@@ -326,6 +326,19 @@ const linkage = (motionA, motionB) => {
     rotY: rotationSourceMotion.final.rotY - rotationSourceMotion.initial.rotY,
     rotZ: rotationSourceMotion.final.rotZ - rotationSourceMotion.initial.rotZ,
   };
+  const observedRotationDeltaOnDominantAxis = toFiniteNumber(rotationDelta[rotation.axis], 0);
+  if (
+    Math.abs(pitchRadius) > EPSILON &&
+    rotation.axis === "rotZ" &&
+    translation.axis === "x" &&
+    Math.abs(translation.delta) > EPSILON
+  ) {
+    const linkedRotationMagnitudeDeg =
+      (Math.abs(translation.delta) / pitchRadius) * (180 / Math.PI);
+    const linkedRotationSign =
+      Math.sign(observedRotationDeltaOnDominantAxis) || Math.sign(translation.delta) || 1;
+    rotationDelta.rotZ = linkedRotationMagnitudeDeg * linkedRotationSign;
+  }
 
   const alignedPinionPose = {
     ...pinionSource,
