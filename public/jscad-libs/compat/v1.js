@@ -139,6 +139,8 @@ const EPSILON = 1e-6;
 const toFiniteNumber = (value, fallback = 0) =>
   typeof value === "number" && Number.isFinite(value) ? value : fallback;
 
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
 const normalizeCoord = (coord) => {
   if (Array.isArray(coord)) {
     const [x = 0, y = 0, z = 0, rotX = 0, rotY = 0, rotZ = 0] = coord;
@@ -163,6 +165,15 @@ const normalizeCoord = (coord) => {
   }
   return { x: 0, y: 0, z: 0, rotX: 0, rotY: 0, rotZ: 0 };
 };
+
+const interpolateCoord = (initial, final, progress) => ({
+  x: initial.x + (final.x - initial.x) * progress,
+  y: initial.y + (final.y - initial.y) * progress,
+  z: initial.z + (final.z - initial.z) * progress,
+  rotX: initial.rotX + (final.rotX - initial.rotX) * progress,
+  rotY: initial.rotY + (final.rotY - initial.rotY) * progress,
+  rotZ: initial.rotZ + (final.rotZ - initial.rotZ) * progress,
+});
 
 const dominantAxis = (deltas) => {
   const entries = Object.entries(deltas)
@@ -229,14 +240,24 @@ const normalizePhaseOffset = (distance, period) => {
   return wrapped;
 };
 
-const linkage = (motionA, motionB) => {
+const linkage = (motionA, motionB, options = {}) => {
   const probe = (motion) => ({
     initial: normalizeCoord(motion?.initial),
     final: normalizeCoord(motion?.final),
   });
 
+  const progressInput =
+    typeof options === "number"
+      ? options
+      : typeof options?.progress === "number"
+        ? options.progress
+        : 1;
+  const progress = clamp(progressInput, 0, 1);
+
   const a = probe(motionA);
   const b = probe(motionB);
+  const currentA = interpolateCoord(a.initial, a.final, progress);
+  const currentB = interpolateCoord(b.initial, b.final, progress);
 
   const deltasA = {
     linear: {
@@ -281,8 +302,8 @@ const linkage = (motionA, motionB) => {
   }
 
   const mechanics = getMechanicsApi();
-  const rackSource = translationSource === "motionA" ? a.final : b.final;
-  const pinionSource = rotationSource === "motionA" ? a.final : b.final;
+  const rackSource = translationSource === "motionA" ? currentA : currentB;
+  const pinionSource = rotationSource === "motionA" ? currentA : currentB;
   const rotationSourceMotion = rotationSource === "motionA" ? a : b;
 
   const rackPart = mechanics.rack(defaultPrinterSettings);

@@ -126,3 +126,46 @@ test("linkage treats rotation input as delta, not absolute angle", () => {
 
   expect(base[1].transforms).toEqual(offsetAngles[1].transforms);
 });
+
+test("linkage defaults omitted progress to the final pose", () => {
+  const v1 = loadCompatAndMechanics();
+
+  const implicitFinal = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+  );
+  const explicitFinal = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) },
+    { progress: 1 }
+  );
+
+  expect(implicitFinal[0].transforms).toEqual(explicitFinal[0].transforms);
+  expect(implicitFinal[1].transforms).toEqual(explicitFinal[1].transforms);
+});
+
+test("linkage interpolates rack and pinion poses from progress", () => {
+  const v1 = loadCompatAndMechanics();
+
+  const start = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) },
+    { progress: 0 }
+  );
+  const mid = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) },
+    { progress: 0.5 }
+  );
+  const end = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) },
+    { progress: 1 }
+  );
+
+  expect(start[0].transforms[12]).toBe(0);
+  expect(mid[0].transforms[12]).toBe(2);
+  expect(end[0].transforms[12]).toBe(4);
+  expect(mid[1].transforms).not.toEqual(start[1].transforms);
+  expect(mid[1].transforms).not.toEqual(end[1].transforms);
+});

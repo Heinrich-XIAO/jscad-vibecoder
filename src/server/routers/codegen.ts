@@ -1711,6 +1711,19 @@ linkage(
 
 The linkage tool returns inferred pitch radius, motion ratio, axis mapping, and progress-ready equations.
 
+When generating code with the v1 compat helper, wire progress directly into the helper:
+\`\`\`js
+function getParameterDefinitions() {
+  return [
+    { name: 'progress', type: 'float', initial: 0, min: 0, max: 1, step: 0.01, caption: 'Progress' },
+  ]
+}
+function main(params) {
+  const { progress = 0 } = params || {}
+  return linkage(motionA, motionB, { progress })
+}
+\`\`\`
+
 ### Mechanism Motion Contract (Metadata-First)
 For mechanisms, always model motion around one normalized input variable:
 - Define one primary motion parameter: \`progress\` in [0, 1].

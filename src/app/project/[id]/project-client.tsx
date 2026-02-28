@@ -62,14 +62,22 @@ function main() {
 module.exports = { main }
 `;
 
-const LINKAGE_TEMPLATE_CODE = `function main() {
+const LINKAGE_TEMPLATE_CODE = `function getParameterDefinitions() {
+  return [
+    { name: 'progress', type: 'float', initial: 0, min: 0, max: 1, step: 0.01, caption: 'Progress' },
+  ]
+}
+
+function main(params) {
+  const { progress = 0 } = params || {}
   return linkage(
     { initial: coord(0, 0, 0), final: coord(Math.PI, 0, 0) },
-    { initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 18) }
+    { initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 18) },
+    { progress }
   )
 }
 
-module.exports = { main }
+module.exports = { main, getParameterDefinitions }
 `;
 
 function normalizeRatios(ids: PaneId[], ratios: Record<PaneId, number>) {
@@ -180,7 +188,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [paneOrder, setPaneOrder] = useState<PaneId[]>(DEFAULT_PANE_ORDER);
   const [paneRatios, setPaneRatios] = useState<Record<PaneId, number>>(DEFAULT_PANE_RATIOS);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("leftStack");
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(isPlaygroundProject ? "rows" : "leftStack");
   const [stackPrimaryRatio, setStackPrimaryRatio] = useState(0.33);
   const [stackSecondaryRatio, setStackSecondaryRatio] = useState(0.5);
   const [activePane, setActivePane] = useState<PaneId>("code");
@@ -507,9 +515,9 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [geometryCount]);
 
   const handleResetLayout = useCallback(() => {
-    setPaneOrder(DEFAULT_PANE_ORDER);
+    setPaneOrder(isPlaygroundProject ? ["code", "viewport", "chat"] : DEFAULT_PANE_ORDER);
     setPaneRatios(DEFAULT_PANE_RATIOS);
-    setLayoutMode("leftStack");
+    setLayoutMode(isPlaygroundProject ? "rows" : "leftStack");
     setStackPrimaryRatio(0.33);
     setStackSecondaryRatio(0.5);
     if (isPlaygroundProject) {
@@ -528,13 +536,28 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [isPlaygroundProject, showChat]);
 
   useEffect(() => {
+    if (!isPlaygroundProject) return;
+    setPaneOrder((current) => {
+      if (current[0] === "code" && current[1] === "viewport") {
+        return current;
+      }
+      return ["code", "viewport", "chat"];
+    });
+    setLayoutMode((current) => (current === "rows" ? current : "rows"));
+  }, [isPlaygroundProject]);
+
+  useEffect(() => {
     if (!visiblePaneIds.includes(activePane) && visiblePaneIds.length > 0) {
       setActivePane(visiblePaneIds[0]);
     }
   }, [activePane, visiblePaneIds]);
 
   useEffect(() => {
-    if (visiblePaneIds.length < 3 && layoutMode !== "columns" && layoutMode !== "rows") {
+    if (
+      visiblePaneIds.length < 3 &&
+      layoutMode !== "columns" &&
+      layoutMode !== "rows"
+    ) {
       setLayoutMode("columns");
     }
   }, [layoutMode, visiblePaneIds.length]);
