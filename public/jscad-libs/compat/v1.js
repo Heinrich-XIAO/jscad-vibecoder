@@ -244,6 +244,26 @@ const liftPhaseEquivalentAngle = (phaseAngleDeg, preferredAngleDeg, periodDeg) =
   return phaseAngleDeg + Math.round((preferredAngleDeg - phaseAngleDeg) / periodDeg) * periodDeg;
 };
 
+const liftPhaseEquivalentAngleWithTieBreak = (phaseAngleDeg, preferredAngleDeg, periodDeg) => {
+  if (
+    !Number.isFinite(phaseAngleDeg) ||
+    !Number.isFinite(preferredAngleDeg) ||
+    !Number.isFinite(periodDeg) ||
+    Math.abs(periodDeg) <= EPSILON
+  ) {
+    return phaseAngleDeg;
+  }
+  const base = (preferredAngleDeg - phaseAngleDeg) / periodDeg;
+  const lower = phaseAngleDeg + Math.floor(base) * periodDeg;
+  const upper = phaseAngleDeg + Math.ceil(base) * periodDeg;
+  const lowerDistance = Math.abs(lower - preferredAngleDeg);
+  const upperDistance = Math.abs(upper - preferredAngleDeg);
+  if (Math.abs(lowerDistance - upperDistance) <= EPSILON) {
+    return preferredAngleDeg >= 0 ? Math.max(lower, upper) : Math.min(lower, upper);
+  }
+  return lowerDistance < upperDistance ? lower : upper;
+};
+
 const buildGearPart = (
   mechanics,
   printerSettings,
@@ -281,10 +301,60 @@ const getPitchFeatures = (part) =>
 const getPhaseMetadata = (part) =>
   typeof part?.getPhaseMetadata === "function" ? part.getPhaseMetadata() : null;
 
+const findBestAngleByOverlap = ({
+  buildMovingGeometry,
+  fixedGeometry,
+  contactWindow,
+  startDeg,
+  endDeg,
+  preferredAngleDeg = 0,
+  coarseSamples = 24,
+  refineRounds = 2,
+}) => {
+  let bestAngleDeg = startDeg;
+  let bestOverlap = Number.POSITIVE_INFINITY;
+
+  let currentStart = startDeg;
+  let currentEnd = endDeg;
+  for (let round = 0; round < refineRounds; round += 1) {
+    const samples = round === 0 ? coarseSamples : Math.max(12, Math.floor(coarseSamples / 2));
+    const step = (currentEnd - currentStart) / samples;
+    for (let i = 0; i <= samples; i += 1) {
+      const angleDeg = currentStart + step * i;
+      const movingGeometry = buildMovingGeometry(angleDeg);
+      const fixedLocal = booleans.intersect(fixedGeometry, contactWindow);
+      const movingLocal = booleans.intersect(movingGeometry, contactWindow);
+      const overlap = measurements.measureVolume(booleans.intersect(fixedLocal, movingLocal));
+      const overlapImproved = overlap < bestOverlap - EPSILON;
+      const overlapTied = Math.abs(overlap - bestOverlap) <= EPSILON;
+      const currentDistance = Math.abs(angleDeg - preferredAngleDeg);
+      const bestDistance = Math.abs(bestAngleDeg - preferredAngleDeg);
+      const closerToPreferred = currentDistance < bestDistance - EPSILON;
+      const sameDistance = Math.abs(currentDistance - bestDistance) <= EPSILON;
+      const preferPositive = preferredAngleDeg >= 0 ? angleDeg > bestAngleDeg : angleDeg < bestAngleDeg;
+      if (
+        overlapImproved ||
+        (overlapTied && (closerToPreferred || (sameDistance && preferPositive)))
+      ) {
+        bestOverlap = overlap;
+        bestAngleDeg = angleDeg;
+      }
+    }
+    currentStart = bestAngleDeg - step;
+    currentEnd = bestAngleDeg + step;
+  }
+
+  return bestAngleDeg;
+};
+
 const computeRackMeshedRotation = ({
   gearPart,
+  gearModel,
   centerX,
+  centerY,
+  rackModel,
   rackX,
+  rackY,
   rackPhaseOriginX,
   rackReferenceToothCenterAtStart,
   preferredAngleDeg,
@@ -295,17 +365,25 @@ const computeRackMeshedRotation = ({
   if (Math.abs(pitchRadius) <= EPSILON) return preferredAngleDeg;
 
   const contactXInRackFrame = centerX - rackX - rackPhaseOriginX;
-  const baselineMeshRotationDeg =
-    (rackReferenceToothCenterAtStart / pitchRadius) * (180 / Math.PI);
-  const phaseAngleDeg =
-    baselineMeshRotationDeg - (contactXInRackFrame / pitchRadius) * (180 / Math.PI);
-  return liftPhaseEquivalentAngle(phaseAngleDeg, preferredAngleDeg, 360 / teethNumber);
+  const visiblePhaseTargetDeg = -(contactXInRackFrame / pitchRadius) * (180 / Math.PI);
+  const theoreticalAngleDeg = liftPhaseEquivalentAngleWithTieBreak(
+    visiblePhaseTargetDeg,
+    preferredAngleDeg,
+    360 / teethNumber
+  );
+  return theoreticalAngleDeg;
 };
 
 const computeMeshedFollowerAngle = ({
   driverAngleDeg,
   driverPart,
+  driverModel,
+  driverCenterX,
+  driverCenterY,
   followerPart,
+  followerModel,
+  followerCenterX,
+  followerCenterY,
 }) => {
   const driverPitch = getPitchFeatures(driverPart);
   const followerPitch = getPitchFeatures(followerPart);
@@ -316,7 +394,42 @@ const computeMeshedFollowerAngle = ({
     getPhaseMetadata(followerPart)?.initialToothPhaseOffsetDegrees,
     0
   );
-  return followerPhase - ((driverAngleDeg - driverPhase) * driverTeeth) / followerTeeth;
+  const theoreticalAngleDeg =
+    followerPhase - ((driverAngleDeg - driverPhase) * driverTeeth) / followerTeeth;
+  const periodDeg = 360 / followerTeeth;
+  const contactWindow = primitives.cuboid({
+    size: [
+      Math.max(toFiniteNumber(followerPitch?.circularPitch, Math.PI) * 2, 5),
+      Math.max(Math.min(toFiniteNumber(followerPitch?.pitchCircle?.radius, 0) * 1.4, 12), 6),
+      20,
+    ],
+    center: [(driverCenterX + followerCenterX) / 2, (driverCenterY + followerCenterY) / 2, 0],
+  });
+  const positionedDriver = applyPose(driverModel, {
+    x: driverCenterX,
+    y: driverCenterY,
+    z: 0,
+    rotX: 0,
+    rotY: 0,
+    rotZ: driverAngleDeg,
+  });
+  const searchStart = theoreticalAngleDeg - periodDeg / 2;
+  const searchEnd = theoreticalAngleDeg + periodDeg / 2;
+  return findBestAngleByOverlap({
+    fixedGeometry: positionedDriver,
+    contactWindow,
+    startDeg: searchStart,
+    endDeg: searchEnd,
+    buildMovingGeometry: (angleDeg) =>
+      applyPose(followerModel, {
+        x: followerCenterX,
+        y: followerCenterY,
+        z: 0,
+        rotX: 0,
+        rotY: 0,
+        rotZ: angleDeg,
+      }),
+  });
 };
 
 const linkage = (motionA, motionB, options = {}) => {
@@ -434,17 +547,20 @@ const linkage = (motionA, motionB, options = {}) => {
     Math.abs(pitchRadius) > EPSILON && rotation.axis === "rotZ"
       ? (Math.abs(currentRackTravel) / pitchRadius) * (180 / Math.PI) * linkedRotationSign
       : observedRotationDeltaOnDominantAxis;
-  const pinionToothPeriodDeg = 360 / pinionTeethNumber;
-  const meshPhaseRotationDeg =
-    Math.abs(pitchRadius) > EPSILON && rotation.axis === "rotZ"
-      ? baselineMeshRotationDeg - (contactXInRackFrame / pitchRadius) * (180 / Math.PI)
-      : observedRotationDeltaOnDominantAxis;
   if (rotation.axis === "rotZ") {
-    rotationDelta.rotZ = liftPhaseEquivalentAngle(
-      meshPhaseRotationDeg,
-      rackDrivenRotationDeg,
-      pinionToothPeriodDeg
-    );
+    const pinionStartAngleDeg = computeRackMeshedRotation({
+      gearPart: pinionPart,
+      gearModel: pinionModel,
+      centerX: rotationSourceInitial.x,
+      centerY: alignedRackPose.y + pitchRadius + DEFAULT_RACK_PINION_GAP,
+      rackModel,
+      rackX: translationSourceInitial.x,
+      rackY: alignedRackPose.y,
+      rackPhaseOriginX,
+      rackReferenceToothCenterAtStart,
+      preferredAngleDeg: linkedRotationSign * EPSILON,
+    });
+    rotationDelta.rotZ = pinionStartAngleDeg + rackDrivenRotationDeg;
   }
 
   const desiredPinionRotationTotalDeg =
@@ -510,32 +626,65 @@ const linkage = (motionA, motionB, options = {}) => {
       idlerPitch?.pitchCircle?.radius,
       (rackDriverTeethNumber * pinionModule) / 2
     );
+    const idlerTeethNumber = Math.max(
+      1,
+      Math.round(toFiniteNumber(idlerPitch?.teethNumber, rackDriverTeethNumber))
+    );
 
-    const rackDriverAngleDeg = computeRackMeshedRotation({
+    const rackDriverModel = getPartModel(rackDriverPart);
+    const idlerModel = getPartModel(idlerPart);
+    const mainModel = getPartModel(mainPart);
+    const rackDriverCenterY = alignedRackPose.y + rackDriverPitchRadius + DEFAULT_RACK_PINION_GAP;
+    const idlerCenterY = rackDriverCenterY + rackDriverPitchRadius + idlerPitchRadius;
+    const mainCenterY = idlerCenterY + idlerPitchRadius + mainPitchRadius;
+
+    const rackDriverStartAngleDeg = computeRackMeshedRotation({
       gearPart: rackDriverPart,
+      gearModel: rackDriverModel,
       centerX: rotationSourceInitial.x,
-      rackX: alignedRackPose.x,
+      centerY: rackDriverCenterY,
+      rackModel,
+      rackX: translationSourceInitial.x,
+      rackY: alignedRackPose.y,
       rackPhaseOriginX,
       rackReferenceToothCenterAtStart,
-      preferredAngleDeg:
-        (Math.abs(currentRackTravel) / Math.max(rackDriverPitchRadius, EPSILON)) *
-        (180 / Math.PI) *
-        linkedRotationSign,
+      preferredAngleDeg: linkedRotationSign * EPSILON,
     });
-    const idlerAngleDeg = computeMeshedFollowerAngle({
-      driverAngleDeg: rackDriverAngleDeg,
+    const rackDriverDeltaDeg =
+      (Math.abs(currentRackTravel) / Math.max(rackDriverPitchRadius, EPSILON)) *
+      (180 / Math.PI) *
+      linkedRotationSign;
+    const rackDriverAngleDeg = rackDriverStartAngleDeg + rackDriverDeltaDeg;
+    const idlerStartAngleDeg = computeMeshedFollowerAngle({
+      driverAngleDeg: rackDriverStartAngleDeg,
       driverPart: rackDriverPart,
+      driverModel: rackDriverModel,
+      driverCenterX: rotationSourceInitial.x,
+      driverCenterY: rackDriverCenterY,
       followerPart: idlerPart,
+      followerModel: idlerModel,
+      followerCenterX: rotationSourceInitial.x,
+      followerCenterY: idlerCenterY,
     });
-    const mainAngleDeg = computeMeshedFollowerAngle({
-      driverAngleDeg: idlerAngleDeg,
+    const idlerAngleDeg =
+      idlerStartAngleDeg - (rackDriverDeltaDeg * rackDriverTeethNumber) / idlerTeethNumber;
+    const mainStartAngleDeg = computeMeshedFollowerAngle({
+      driverAngleDeg: idlerStartAngleDeg,
       driverPart: idlerPart,
+      driverModel: idlerModel,
+      driverCenterX: rotationSourceInitial.x,
+      driverCenterY: idlerCenterY,
       followerPart: mainPart,
+      followerModel: mainModel,
+      followerCenterX: rotationSourceInitial.x,
+      followerCenterY: mainCenterY,
     });
+    const mainAngleDeg =
+      mainStartAngleDeg + (rackDriverDeltaDeg * rackDriverTeethNumber) / mainTeethNumber;
 
     const rackDriverPose = {
       x: rotationSourceInitial.x,
-      y: alignedRackPose.y + rackDriverPitchRadius + DEFAULT_RACK_PINION_GAP,
+      y: rackDriverCenterY,
       z: rotationSourceInitial.z,
       rotX: 0,
       rotY: 0,
@@ -543,7 +692,7 @@ const linkage = (motionA, motionB, options = {}) => {
     };
     const idlerPose = {
       x: rotationSourceInitial.x,
-      y: rackDriverPose.y + rackDriverPitchRadius + idlerPitchRadius,
+      y: idlerCenterY,
       z: rotationSourceInitial.z,
       rotX: 0,
       rotY: 0,
@@ -551,16 +700,16 @@ const linkage = (motionA, motionB, options = {}) => {
     };
     const mainPose = {
       x: rotationSourceInitial.x,
-      y: idlerPose.y + idlerPitchRadius + mainPitchRadius,
+      y: mainCenterY,
       z: rotationSourceInitial.z,
       rotX: rotationDelta.rotX,
       rotY: rotationDelta.rotY,
       rotZ: mainAngleDeg,
     };
 
-    assembly.push(unwrapGeometry(applyPose(getPartModel(rackDriverPart), rackDriverPose)));
-    assembly.push(unwrapGeometry(applyPose(getPartModel(idlerPart), idlerPose)));
-    assembly.push(unwrapGeometry(applyPose(getPartModel(mainPart), mainPose)));
+    assembly.push(unwrapGeometry(applyPose(rackDriverModel, rackDriverPose)));
+    assembly.push(unwrapGeometry(applyPose(idlerModel, idlerPose)));
+    assembly.push(unwrapGeometry(applyPose(mainModel, mainPose)));
     return assembly;
   }
 

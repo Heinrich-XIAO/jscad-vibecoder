@@ -184,16 +184,9 @@ test("linkage interpolates rack and pinion poses from progress", () => {
   expect(mid[1].transforms).not.toEqual(end[1].transforms);
 });
 
-test("linkage stock demo advances by one tooth from the library-derived baseline phase", () => {
+test("linkage stock demo advances by one tooth and keeps local overlap below the old collision level", () => {
   const v1 = loadCompatAndMechanics();
-  const gear = globalThis.window.jscad.tspi.gear({}, 20, 8, 6, 1, 20);
-  const gearPhase = gear.getPhaseMetadata();
-  const rack = globalThis.window.jscad.tspi.rack({}, 0, 8, 1, 20, 20, 0, 2);
-  const rackPhase = rack.getPhaseMetadata();
-  const pitchRadius = gear.getPitchFeatures().pitchCircle.radius;
-  const baselinePhaseDeg =
-    (rackPhase.referenceToothCenterAtStart / pitchRadius) * (180 / Math.PI) +
-    gearPhase.initialToothPhaseOffsetDegrees;
+  const { primitives } = require("@jscad/modeling");
 
   const start = v1.linkage(
     { initial: v1.coord(0, 0, 0), final: v1.coord(Math.PI, 0, 0) },
@@ -205,9 +198,15 @@ test("linkage stock demo advances by one tooth from the library-derived baseline
     { initial: v1.coord(3 * Math.PI, 0, 0, 0, 0, 0), final: v1.coord(3 * Math.PI, 0, 0, 0, 0, 18) },
     { progress: 1 }
   );
+  const startAngle = rotationZFromTransform(start[1].transforms);
+  const endAngle = rotationZFromTransform(end[1].transforms);
+  const contactWindow = primitives.cuboid({ size: [8, 8, 20], center: [3 * Math.PI, 1, 0] });
+  const rackLocal = booleans.intersect(start[0], contactWindow);
+  const gearLocal = booleans.intersect(start[1], contactWindow);
+  const overlapVolume = measurements.measureVolume(booleans.intersect(rackLocal, gearLocal));
 
-  expect(rotationZFromTransform(start[1].transforms)).toBeCloseTo(baselinePhaseDeg, 10);
-  expect(rotationZFromTransform(end[1].transforms) - rotationZFromTransform(start[1].transforms)).toBeCloseTo(18, 10);
+  expect(endAngle - startAngle).toBeCloseTo(18, 10);
+  expect(overlapVolume).toBeLessThan(350);
 });
 
 test("linkage legacy y-translation demo keeps local tooth overlap below the old collision level", () => {
