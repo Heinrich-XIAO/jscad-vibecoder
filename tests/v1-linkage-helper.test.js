@@ -69,6 +69,18 @@ test("linkage works when rotation and translation motions are swapped", () => {
   expect(assembly.length).toBe(2);
 });
 
+test("linkage places the rack at its translated final pose", () => {
+  const v1 = loadCompatAndMechanics();
+  const assembly = v1.linkage(
+    { initial: v1.coord(0, 0, 0), final: v1.coord(4, 0, 0) },
+    { initial: v1.coord(10, 0, 0, 0, 0, 0), final: v1.coord(10, 0, 0, 0, 0, 50) }
+  );
+
+  expect(Array.isArray(assembly[0].transforms)).toBe(true);
+  expect(assembly[0].transforms[12]).toBe(4);
+  expect(assembly[0].transforms[13]).toBe(0);
+});
+
 test("linkage rotates pinion phase to match rack position", () => {
   const v1 = loadCompatAndMechanics();
 

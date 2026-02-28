@@ -281,8 +281,8 @@ const linkage = (motionA, motionB) => {
   }
 
   const mechanics = getMechanicsApi();
-  const rackSource = translationSource === "motionA" ? a.initial : b.initial;
-  const pinionSource = rotationSource === "motionA" ? a.initial : b.initial;
+  const rackSource = translationSource === "motionA" ? a.final : b.final;
+  const pinionSource = rotationSource === "motionA" ? a.final : b.final;
   const rotationSourceMotion = rotationSource === "motionA" ? a : b;
 
   const rackPart = mechanics.rack(defaultPrinterSettings);
