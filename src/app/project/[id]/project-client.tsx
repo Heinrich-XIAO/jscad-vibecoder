@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useQuery, useMutation } from "convex/react";
-import { ArrowLeft, Play, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Box, Camera, RotateCcw, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Play, Pause, Save, Settings, Download, History, MessageSquare, Code, BarChart3, Box, Camera, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { ChatPanel, type ChatPanelHandle } from "@/components/chat-panel";
 import { CodeEditor, type CodeEditorHandle } from "@/components/code-editor";
 import { Viewport3D, type Viewport3DHandle } from "@/components/viewport-3d";
@@ -72,13 +72,19 @@ function main(params) {
   const { progress = 0 } = params || {}
   return linkage(
     { initial: coord(0, 0, 0), final: coord(Math.PI, 0, 0) },
-    { initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 18) },
+    { initial: coord(3 * Math.PI, 0, 0, 0, 0, 0), final: coord(3 * Math.PI, 0, 0, 0, 0, 18) },
     { progress }
   )
 }
 
 module.exports = { main, getParameterDefinitions }
 `;
+
+const PROGRESS_PARAM_NAME = "progress";
+const PROGRESS_ANIMATION_DURATION_MS = 2000;
+
+const LEGACY_LINKAGE_TEMPLATE_SNIPPET =
+  "{ initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 18) }";
 
 function normalizeRatios(ids: PaneId[], ratios: Record<PaneId, number>) {
   const total = ids.reduce((sum, id) => sum + Math.max(0.01, ratios[id] ?? 0.01), 0);
@@ -168,6 +174,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const [error, setError] = useState<JscadExecutionError | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSnapshotting, setIsSnapshotting] = useState(false);
+  const [isProgressAnimating, setIsProgressAnimating] = useState(false);
   
   // Undo/redo for code editor
   const {
@@ -203,6 +210,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const editorRef = useRef<CodeEditorHandle>(null);
   const parametersRef = useRef<ParameterSlidersHandle>(null);
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const executionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPersistedCodeRef = useRef("");
   const hasLoadedInitialCodeRef = useRef(false);
   const layoutRef = useRef<HTMLDivElement>(null);
@@ -224,6 +232,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   } | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const hasAutoCompactedInitialLayoutRef = useRef(false);
+  const progressAnimationStartRef = useRef<number | null>(null);
+  const latestCodeRef = useRef(code);
+  const latestParametersRef = useRef(parameters);
+  const isExecutingRef = useRef(false);
+  const hasQueuedExecutionRef = useRef(false);
+  const isProgressAnimatingRef = useRef(false);
 
   const { execute } = useJscadWorker();
   const geometryCount = geometry.length;
@@ -265,6 +279,13 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [code, isAuthLoaded, isSignedIn, resetCode]);
 
   useEffect(() => {
+    if (!isPlaygroundProject || !code) return;
+    if (!code.includes(LEGACY_LINKAGE_TEMPLATE_SNIPPET)) return;
+    resetCode(LINKAGE_TEMPLATE_CODE);
+    lastPersistedCodeRef.current = LINKAGE_TEMPLATE_CODE;
+  }, [code, isPlaygroundProject, resetCode]);
+
+  useEffect(() => {
     if (!focusChatParam || !projectId || hasAutoFocusedChatRef.current) return;
 
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -292,9 +313,24 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [focusChatParam, projectId, pathname, router]);
 
   useEffect(() => {
+    latestCodeRef.current = code;
+  }, [code]);
+
+  useEffect(() => {
+    latestParametersRef.current = parameters;
+  }, [parameters]);
+
+  useEffect(() => {
+    isProgressAnimatingRef.current = isProgressAnimating;
+  }, [isProgressAnimating]);
+
+  useEffect(() => {
     return () => {
       if (autosaveTimeoutRef.current) {
         clearTimeout(autosaveTimeoutRef.current);
+      }
+      if (executionTimeoutRef.current) {
+        clearTimeout(executionTimeoutRef.current);
       }
       resizeCleanupRef.current?.();
     };
@@ -314,14 +350,20 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [code]);
 
   const executeCode = useCallback(async () => {
-    if (!code) return;
-    
+    if (!latestCodeRef.current) return;
+
+    if (isExecutingRef.current) {
+      hasQueuedExecutionRef.current = true;
+      return;
+    }
+
+    isExecutingRef.current = true;
     setIsGenerating(true);
     setError(null);
-    
+
     try {
-      const result = await execute(code, parameters);
-      
+      const result = await execute(latestCodeRef.current, latestParametersRef.current);
+
       if (result.error) {
         setError(result.error);
         setGeometry([]);
@@ -336,14 +378,49 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       );
       setGeometry([]);
     } finally {
+      isExecutingRef.current = false;
       setIsGenerating(false);
+      if (isProgressAnimatingRef.current && progressAnimationStartRef.current !== null) {
+        const elapsed = performance.now() - progressAnimationStartRef.current;
+        const nextProgress = Math.min(elapsed / PROGRESS_ANIMATION_DURATION_MS, 1);
+        const currentProgress = Number(latestParametersRef.current[PROGRESS_PARAM_NAME] ?? 0);
+
+        if (nextProgress >= 1) {
+          progressAnimationStartRef.current = null;
+          setIsProgressAnimating(false);
+          if (currentProgress !== 1) {
+            setParameters((prev) => ({
+              ...prev,
+              [PROGRESS_PARAM_NAME]: 1,
+            }));
+          }
+        } else if (nextProgress > currentProgress + 0.0001) {
+          setParameters((prev) => ({
+            ...prev,
+            [PROGRESS_PARAM_NAME]: nextProgress,
+          }));
+        }
+      }
+      if (hasQueuedExecutionRef.current) {
+        hasQueuedExecutionRef.current = false;
+        void executeCode();
+      }
     }
-  }, [code, parameters, execute]);
+  }, [execute]);
+
+  const scheduleExecution = useCallback((delayMs: number) => {
+    if (executionTimeoutRef.current) {
+      clearTimeout(executionTimeoutRef.current);
+    }
+    executionTimeoutRef.current = setTimeout(() => {
+      executionTimeoutRef.current = null;
+      void executeCode();
+    }, delayMs);
+  }, [executeCode]);
 
   useEffect(() => {
-    const timeout = setTimeout(executeCode, 500);
-    return () => clearTimeout(timeout);
-  }, [executeCode]);
+    scheduleExecution(isProgressAnimating ? 0 : 500);
+  }, [code, parameters, isProgressAnimating, scheduleExecution]);
 
   const handleSaveVersion = useCallback(async () => {
     if (isPlaygroundProject) return;
@@ -432,10 +509,16 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [versions, currentVersionId, handleLoadVersion]);
 
   const handleParameterChange = (name: string, value: number | boolean | string) => {
+    if (name === PROGRESS_PARAM_NAME && isProgressAnimating) {
+      progressAnimationStartRef.current = null;
+      setIsProgressAnimating(false);
+    }
     setParameters((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleResetParameters = useCallback(() => {
+    progressAnimationStartRef.current = null;
+    setIsProgressAnimating(false);
     const defaults: ParameterValues = {};
     parameterDefs.forEach((def) => {
       defaults[def.name] = (def.initial ?? def.value) as number | boolean | string;
@@ -446,6 +529,10 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const handleResetParameter = useCallback((name: string) => {
     const def = parameterDefs.find((d) => d.name === name);
     if (def) {
+      if (name === PROGRESS_PARAM_NAME) {
+        progressAnimationStartRef.current = null;
+        setIsProgressAnimating(false);
+      }
       setParameters((prev) => ({
         ...prev,
         [name]: (def.initial ?? def.value) as number | boolean | string,
@@ -468,6 +555,35 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const handlePromptComplete = useCallback(() => {
     void autosaveDraft();
   }, [autosaveDraft]);
+
+  const stopProgressAnimation = useCallback(() => {
+    progressAnimationStartRef.current = null;
+    setIsProgressAnimating(false);
+  }, []);
+
+  const handleToggleProgressAnimation = useCallback(() => {
+    const progressDef = parameterDefs.find((def) => def.name === PROGRESS_PARAM_NAME && def.type === "number");
+    if (!progressDef) return;
+
+    if (isProgressAnimating) {
+      stopProgressAnimation();
+      return;
+    }
+
+    setParameters((prev) => ({
+      ...prev,
+      [PROGRESS_PARAM_NAME]: progressDef.min ?? 0,
+    }));
+    setIsProgressAnimating(true);
+    progressAnimationStartRef.current = performance.now();
+  }, [isProgressAnimating, parameterDefs, stopProgressAnimation]);
+
+  useEffect(() => {
+    const hasProgressParameter = parameterDefs.some((def) => def.name === PROGRESS_PARAM_NAME && def.type === "number");
+    if (!hasProgressParameter && isProgressAnimating) {
+      stopProgressAnimation();
+    }
+  }, [isProgressAnimating, parameterDefs, stopProgressAnimation]);
 
   const handleInsertViewportSnapshot = useCallback(() => {
     if (!viewportRef.current?.captureImage) {
@@ -1137,6 +1253,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const displayProjectName = isPlaygroundProject
     ? "Linkage Playground"
     : (project?.name ?? "Guest Project");
+  const hasProgressParameter = parameterDefs.some((def) => def.name === PROGRESS_PARAM_NAME && def.type === "number");
 
   const activeDropPane = dropTarget?.paneId ?? null;
   const activeDropZone = dropTarget?.zone ?? null;
@@ -1205,14 +1322,26 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
             <div className="flex-1 min-h-0 flex">
               <div className="flex-1 min-h-0 relative">
-                <button
-                  onClick={handleInsertViewportSnapshot}
-                  disabled={isSnapshotting || geometryCount === 0 || isGenerating}
-                  className="absolute top-2 left-2 z-10 p-2 rounded-md bg-background/90 border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  title={geometryCount === 0 ? "Run code to capture a model snapshot" : "Insert the current view into your next prompt"}
-                >
-                  <Camera className="w-4 h-4" />
-                </button>
+                <div className="absolute top-2 left-2 z-10 flex items-center gap-2">
+                  <button
+                    onClick={handleInsertViewportSnapshot}
+                    disabled={isSnapshotting || geometryCount === 0 || isGenerating}
+                    className="p-2 rounded-md bg-background/90 border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title={geometryCount === 0 ? "Run code to capture a model snapshot" : "Insert the current view into your next prompt"}
+                  >
+                    <Camera className="w-4 h-4" />
+                  </button>
+                  {hasProgressParameter && (
+                    <button
+                      type="button"
+                      onClick={handleToggleProgressAnimation}
+                      className="p-2 rounded-md bg-background/90 border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors"
+                      title={isProgressAnimating ? "Pause progress animation" : "Play progress animation"}
+                    >
+                      {isProgressAnimating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    </button>
+                  )}
+                </div>
                 <Viewport3D
                   geometry={geometry}
                   isGenerating={isGenerating}
