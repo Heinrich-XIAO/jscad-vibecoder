@@ -161,6 +161,14 @@ function executeExternalModule(path, parentUrl) {
   }
 }
 
+function invalidateLocalModuleCache() {
+  for (const key of Array.from(remoteModuleCache.keys())) {
+    if (typeof key === 'string' && key.startsWith(self.location.origin + '/jscad-libs/')) {
+      remoteModuleCache.delete(key);
+    }
+  }
+}
+
 console.log('[JSCAD Worker] JSCAD loaded');
 
 // Signal ready
@@ -171,6 +179,8 @@ self.onmessage = function(e) {
   
   if (type === 'evaluate') {
     try {
+      invalidateLocalModuleCache();
+
       // Main-file require/include implementation
       const require = function(path) {
         if (path === '@jscad/modeling') return modeling;
