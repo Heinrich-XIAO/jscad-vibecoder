@@ -62,6 +62,16 @@ function main() {
 module.exports = { main }
 `;
 
+const LINKAGE_TEMPLATE_CODE = `function main() {
+  return linkage(
+    { initial: coord(0, 0, 0), final: coord(Math.PI, 0, 0) },
+    { initial: coord(10, 0, 0, 0, 0, 0), final: coord(10, 0, 0, 0, 0, 18) }
+  )
+}
+
+module.exports = { main }
+`;
+
 function normalizeRatios(ids: PaneId[], ratios: Record<PaneId, number>) {
   const total = ids.reduce((sum, id) => sum + Math.max(0.01, ratios[id] ?? 0.01), 0);
   const normalized: Record<PaneId, number> = {
@@ -129,11 +139,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const focusChatParam = searchParams.get("focusChat") === "1";
+  const isPlaygroundProject = id === "playground";
 
   const projectQueryArgs = useMemo(() => {
-    if (!id || !isAuthLoaded || !userId) return "skip";
+    if (isPlaygroundProject || !id || !isAuthLoaded || !userId) return "skip";
     return { id: id as Id<"projects">, ownerId: userId };
-  }, [id, isAuthLoaded, userId]);
+  }, [id, isAuthLoaded, isPlaygroundProject, userId]);
 
   const projectId = projectQueryArgs === "skip" ? null : projectQueryArgs.id;
   const versionsArgs = projectQueryArgs === "skip" ? "skip" : { projectId: projectQueryArgs.id, ownerId: projectQueryArgs.ownerId };
@@ -161,7 +172,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     reset: resetCode,
   } = useUndoRedo<string>("", 50);
   
-  const [showChat, setShowChat] = useState(true);
+  const [showChat, setShowChat] = useState(!isPlaygroundProject);
   const [showVersions, setShowVersions] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -224,12 +235,18 @@ export default function ProjectPage({ id }: ProjectPageProps) {
 
   useEffect(() => {
     if (hasLoadedInitialCodeRef.current) return;
+    if (isPlaygroundProject) {
+      resetCode(LINKAGE_TEMPLATE_CODE);
+      lastPersistedCodeRef.current = LINKAGE_TEMPLATE_CODE;
+      hasLoadedInitialCodeRef.current = true;
+      return;
+    }
     if (project && project.currentVersion?.jscadCode) {
       resetCode(project.currentVersion.jscadCode);
       lastPersistedCodeRef.current = project.currentVersion.jscadCode;
       hasLoadedInitialCodeRef.current = true;
     }
-  }, [project, resetCode]);
+  }, [isPlaygroundProject, project, resetCode]);
 
   useEffect(() => {
     if (hasLoadedInitialCodeRef.current) return;
@@ -321,6 +338,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [executeCode]);
 
   const handleSaveVersion = useCallback(async () => {
+    if (isPlaygroundProject) return;
     if (!code || !projectId || !userId) return;
     
     try {
@@ -336,7 +354,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     } catch (err) {
       console.error("Failed to save version:", err);
     }
-  }, [code, createVersion, projectId, userId]);
+  }, [code, createVersion, isPlaygroundProject, projectId, userId]);
 
   const getActiveVersionId = useCallback(() => {
     if (currentVersionId) return currentVersionId as Id<"versions">;
@@ -345,6 +363,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
   }, [currentVersionId, project]);
 
   const autosaveDraft = useCallback(async () => {
+    if (isPlaygroundProject) return;
     if (!code || !userId) return;
 
     if (code === lastPersistedCodeRef.current) {
@@ -366,7 +385,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     } catch (err) {
       console.error("Failed to autosave draft:", err);
     }
-  }, [code, getActiveVersionId, saveDraft, userId]);
+  }, [code, getActiveVersionId, isPlaygroundProject, saveDraft, userId]);
 
   const scheduleAutosaveDraft = useCallback((delayMs: number) => {
     if (autosaveTimeoutRef.current) {
@@ -493,8 +512,20 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     setLayoutMode("leftStack");
     setStackPrimaryRatio(0.33);
     setStackSecondaryRatio(0.5);
+    if (isPlaygroundProject) {
+      setShowChat(false);
+      setActivePane("code");
+      return;
+    }
+    setShowChat(true);
     setActivePane("code");
-  }, []);
+  }, [isPlaygroundProject]);
+
+  useEffect(() => {
+    if (isPlaygroundProject && showChat) {
+      setShowChat(false);
+    }
+  }, [isPlaygroundProject, showChat]);
 
   useEffect(() => {
     if (!visiblePaneIds.includes(activePane) && visiblePaneIds.length > 0) {
@@ -950,6 +981,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         key: "/",
         ctrl: true,
         handler: () => {
+          if (isPlaygroundProject) return;
           setShowChat((v) => {
             const next = !v;
             if (next) setActivePane("chat");
@@ -962,7 +994,10 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       {
         key: "h",
         ctrl: true,
-        handler: () => setShowVersions((v) => !v),
+        handler: () => {
+          if (isPlaygroundProject) return;
+          setShowVersions((v) => !v);
+        },
         description: "Toggle version history",
         group: "Panels",
       },
@@ -977,6 +1012,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         key: "j",
         ctrl: true,
         handler: () => {
+          if (isPlaygroundProject) return;
           if (!showChat) setShowChat(true);
           setActivePane("chat");
           // Focus the chat input after a tick so it's rendered
@@ -1036,6 +1072,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     [
       handleSaveVersion,
       handleRun,
+      isPlaygroundProject,
       undoCode,
       redoCode,
       showChat,
@@ -1058,7 +1095,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     );
   }
 
-  if (isSignedIn && project === undefined) {
+  if (!isPlaygroundProject && isSignedIn && project === undefined) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-muted-foreground">Loading project...</div>
@@ -1066,7 +1103,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     );
   }
 
-  if (isSignedIn && project === null) {
+  if (!isPlaygroundProject && isSignedIn && project === null) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-muted-foreground">Project not found.</div>
@@ -1074,7 +1111,9 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     );
   }
 
-  const displayProjectName = project?.name ?? "Guest Project";
+  const displayProjectName = isPlaygroundProject
+    ? "Linkage Playground"
+    : (project?.name ?? "Guest Project");
 
   const activeDropPane = dropTarget?.paneId ?? null;
   const activeDropZone = dropTarget?.zone ?? null;
@@ -1098,7 +1137,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         {showDrop && activeDropZone === "bottom" && <div className="absolute left-0 right-0 bottom-0 h-1.5 bg-primary/70 pointer-events-none z-20" />}
         {showDrop && activeDropZone === "center" && <div className="absolute inset-0 border-2 border-primary/70 pointer-events-none z-20" />}
 
-        {paneId === "chat" && (
+        {paneId === "chat" && !isPlaygroundProject && (
           <ChatPanel
             ref={chatPanelRef}
             projectId={projectId ?? id}
@@ -1192,7 +1231,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               </div>
             )}
 
-            {showVersions && versions && (
+            {showVersions && versions && !isPlaygroundProject && (
               <div className="border-t border-border p-4 max-h-64 overflow-y-auto">
                 <VersionHistory
                   versions={versions}
@@ -1221,20 +1260,25 @@ export default function ProjectPage({ id }: ProjectPageProps) {
             <h1 className="font-semibold text-lg">{displayProjectName}</h1>
             <div className="flex items-center gap-3">
               <p className="text-xs text-muted-foreground">
-                {versions?.length || 0} versions
+                {isPlaygroundProject ? "Unsaved guest project" : `${versions?.length || 0} versions`}
               </p>
+              {isPlaygroundProject && (
+                <p className="text-xs text-muted-foreground">Agents disabled</p>
+              )}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowVersions(!showVersions)}
-            className={`p-2 rounded-lg transition-colors ${showVersions ? "bg-primary/20 text-primary" : "hover:bg-secondary"}`}
-            title="Version History (Ctrl+H)"
-          >
-            <History className="w-5 h-5" />
-          </button>
+          {!isPlaygroundProject && (
+            <button
+              onClick={() => setShowVersions(!showVersions)}
+              className={`p-2 rounded-lg transition-colors ${showVersions ? "bg-primary/20 text-primary" : "hover:bg-secondary"}`}
+              title="Version History (Ctrl+H)"
+            >
+              <History className="w-5 h-5" />
+            </button>
+          )}
           <button
             onClick={() => setShowGeometryInfo(!showGeometryInfo)}
             className={`p-2 rounded-lg transition-colors ${showGeometryInfo ? "bg-primary/20 text-primary" : "hover:bg-secondary"}`}
@@ -1242,17 +1286,19 @@ export default function ProjectPage({ id }: ProjectPageProps) {
           >
             <BarChart3 className="w-5 h-5" />
           </button>
-          <button
-            onClick={() => {
-              const next = !showChat;
-              setShowChat(next);
-              if (next) setActivePane("chat");
-            }}
-            className={`p-2 rounded-lg transition-colors ${showChat ? "bg-primary/20 text-primary" : "hover:bg-secondary"}`}
-            title="Toggle Chat (Ctrl+/)"
-          >
-            <MessageSquare className="w-5 h-5" />
-          </button>
+          {!isPlaygroundProject && (
+            <button
+              onClick={() => {
+                const next = !showChat;
+                setShowChat(next);
+                if (next) setActivePane("chat");
+              }}
+              className={`p-2 rounded-lg transition-colors ${showChat ? "bg-primary/20 text-primary" : "hover:bg-secondary"}`}
+              title="Toggle Chat (Ctrl+/)"
+            >
+              <MessageSquare className="w-5 h-5" />
+            </button>
+          )}
           <button
             onClick={handleResetLayout}
             className="p-2 rounded-lg transition-colors hover:bg-secondary"
@@ -1272,14 +1318,16 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               <Play className="w-4 h-4" />
               {isGenerating ? "Running..." : "Run"}
             </button>
-          <button
-            onClick={handleSaveVersion}
-            className="flex items-center gap-2 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80"
-            title="Save Version (Ctrl+S)"
-          >
-            <Save className="w-4 h-4" />
-            Save
-          </button>
+          {!isPlaygroundProject && (
+            <button
+              onClick={handleSaveVersion}
+              className="flex items-center gap-2 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80"
+              title="Save Version (Ctrl+S)"
+            >
+              <Save className="w-4 h-4" />
+              Save
+            </button>
+          )}
           <button
             onClick={() => setShowExport(true)}
             className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-lg text-sm hover:bg-secondary"
