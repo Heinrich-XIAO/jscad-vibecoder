@@ -1265,7 +1265,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
     return (
       <div
         key={paneId}
-        className={`relative min-w-0 min-h-0 flex flex-col bg-card border border-border rounded-lg overflow-hidden ${isActive ? "ring-2 ring-primary" : ""} ${extraClassName ?? ""}`}
+        className={`relative min-w-0 min-h-0 flex flex-col bg-card border border-background rounded-lg overflow-hidden ${isActive ? "ring-2 ring-primary" : ""} ${extraClassName ?? ""}`}
         style={style}
         onClick={() => setActivePane(paneId)}
         onDragOver={(event) => handlePaneDragOver(event, paneId)}
@@ -1516,7 +1516,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
                     {renderPane(paneId, { flexBasis: 0, flexGrow: visiblePaneRatios[paneId], flexShrink: 1 })}
                     {index < ordered.length - 1 && (
                       <div
-                        className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
+                        className="h-1.5 bg-background hover:bg-primary/40 transition-colors cursor-row-resize"
                         onMouseDown={(event) => startPairResize("y", paneId, ordered[index + 1], event)}
                       />
                     )}
@@ -1532,13 +1532,13 @@ export default function ProjectPage({ id }: ProjectPageProps) {
               <div className="flex-1 min-h-0 flex">
                 {renderPane(leftPane, { flexBasis: 0, flexGrow: stackPrimaryRatio, flexShrink: 1 })}
                 <div
-                  className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
+                  className="w-1.5 bg-background hover:bg-primary/40 transition-colors cursor-col-resize"
                   onMouseDown={startStackPrimaryResize}
                 />
                 <div style={{ flexBasis: 0, flexGrow: 1 - stackPrimaryRatio, flexShrink: 1 }} className="min-w-0 min-h-0 flex flex-col">
                   {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 })}
                   <div
-                    className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
+                    className="h-1.5 bg-background hover:bg-primary/40 transition-colors cursor-row-resize"
                     onMouseDown={(event) => startStackSecondaryResize(topPane, bottomPane, event)}
                   />
                   {renderPane(bottomPane, { flexBasis: 0, flexGrow: 1 - stackSecondaryRatio, flexShrink: 1 })}
@@ -1554,13 +1554,13 @@ export default function ProjectPage({ id }: ProjectPageProps) {
                 <div style={{ flexBasis: 0, flexGrow: stackPrimaryRatio, flexShrink: 1 }} className="min-w-0 min-h-0 flex flex-col">
                   {renderPane(topPane, { flexBasis: 0, flexGrow: stackSecondaryRatio, flexShrink: 1 })}
                   <div
-                    className="h-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-row-resize"
+                    className="h-1.5 bg-background hover:bg-primary/40 transition-colors cursor-row-resize"
                     onMouseDown={(event) => startStackSecondaryResize(topPane, bottomPane, event)}
                   />
                   {renderPane(bottomPane, { flexBasis: 0, flexGrow: 1 - stackSecondaryRatio, flexShrink: 1 })}
                 </div>
                 <div
-                  className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
+                  className="w-1.5 bg-background hover:bg-primary/40 transition-colors cursor-col-resize"
                   onMouseDown={startStackPrimaryResize}
                 />
                 {renderPane(rightPane, { flexBasis: 0, flexGrow: 1 - stackPrimaryRatio, flexShrink: 1 })}
@@ -1575,7 +1575,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
                   {renderPane(paneId, { flexBasis: 0, flexGrow: visiblePaneRatios[paneId], flexShrink: 1 })}
                   {index < ordered.length - 1 && (
                     <div
-                      className="w-1.5 bg-border/80 hover:bg-primary/40 transition-colors cursor-col-resize"
+                      className="w-1.5 bg-background hover:bg-primary/40 transition-colors cursor-col-resize"
                       onMouseDown={(event) => startPairResize("x", paneId, ordered[index + 1], event)}
                     />
                   )}
